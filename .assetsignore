@@ -1,0 +1,13 @@
+worker.js
+wrangler.jsonc
+package.json
+package-lock.json
+migrations/
+README-CLOUDFLARE.md
+README.md
+.gitignore
+.git/
+.github/
+node_modules/
+.wrangler/
+.assetsignore

@@ -82,8 +82,33 @@
   const todayISO=()=>localDate(new Date());
   const monthStart=()=>todayISO().slice(0,7)+'-01';
   const dateLabel=value=>new Date(String(value).slice(0,10)+'T12:00:00').toLocaleDateString('id-ID',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  const CLOUD=window.KSBCloud;
   let state=readState(),toastTimer=null,activeStep='login',activeAdminTab='orders',activeLedgerTab='operational',dateStart=monthStart(),dateEnd=todayISO();
-  function persist(){try{localStorage.setItem(STORE,JSON.stringify(state));return true;}catch(_){toast('Penyimpanan demo browser penuh.');return false;}}
+  let cloudMode=false,cloudReady=false,cloudRole=null,cloudUser=null,cloudOwnerExists=false;
+  function persist(){
+    try{localStorage.setItem(STORE,JSON.stringify(state));}catch(_){toast('Penyimpanan browser penuh.');return false;}
+    return true;
+  }
+  function applyCloudData(user,ownerData=null){
+    cloudMode=true;cloudReady=true;cloudRole=user?.role||null;cloudUser=user||null;cloudOwnerExists=CLOUD.ownerExists;
+    if(ownerData){
+      state.settings={...BASE.settings,...ownerData.settings};state.stock={...BASE.stock,...ownerData.stock};state.orders=ownerData.orders||[];state.ledger=ownerData.ledger||[];state.owner=ownerData.owner;
+      state.customers=[];
+    }else if(user?.role==='customer'){
+      state.customers=[{phone:user.phone,name:user.name,addresses:user.addresses||[]}];state.orders=user.orders||[];state.ledger=[];
+    }else{
+      state.settings={...BASE.settings,...(CLOUD.bootstrapSettings||{})};state.stock={...BASE.stock,...(CLOUD.bootstrapStock||{})};state.orders=[];state.ledger=[];state.customers=[];delete state.owner;
+    }
+    state.settings.shippingFee=10000;state.settings.freeShippingSubtotal=70000;
+    try{localStorage.setItem(STORE,JSON.stringify(state));}catch(_){}
+    renderBrandImages();if(state.settings.heroImage)$('.hero-visual>img').src=state.settings.heroImage;
+    renderBuilder();updateCartUi();
+  }
+  async function refreshCloudOwner(){
+    if(!cloudMode||cloudRole!=='owner')return;
+    const snapshot=await CLOUD.loadOwnerState();applyCloudData(cloudUser,snapshot);
+    renderAdmin(activeAdminTab);
+  }
   function toast(message){const el=$('#toast');el.textContent=message;el.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove('show'),3200);}
   function showModal(html,wide=false){$('.modal-panel').classList.toggle('wide',wide);$('#modalBody').innerHTML=html;$('#modalBackdrop').hidden=false;document.body.style.overflow='hidden';const first=$('#modalBody').querySelector('input:not([type=file]),button,textarea,select');if(first)setTimeout(()=>first.focus(),30);}
   function closeModal(){ $('#modalBackdrop').hidden=true;$('#modalBody').innerHTML='';document.body.style.overflow=''; }
@@ -195,9 +220,12 @@
   function packageCountForDate(date){return state.orders.filter(order=>order.deliveryDate===date&&!['Dibatalkan','Selesai'].includes(order.status)).reduce((sum,order)=>sum+Number(order.packages||order.items?.reduce((s,item)=>s+Number(item.qty||0),0)||0),0);}
   function estimateDelivery(packages){const tomorrow=addDays(todayISO(),1),cap=Math.max(1,Number(state.settings.maxPackagesDay)||30);return packageCountForDate(tomorrow)+packages>cap?addDays(tomorrow,1):tomorrow;}
   function totalHpp(item){const per100=Number(state.settings.hppPer100g)||0,bag=Number(state.settings.pouchCost)||0;return Math.round(per100*Number(item.weight||0)/100+bag);}
-  function normalizedPhone(value){return String(value||'').replace(/[^0-9]/g,'');}
-  function currentCustomer(){const phone=sessionStorage.getItem(CUSTOMER_SESSION);return state.customers.find(item=>item.phone===phone)||null;}
-  function ownerAuthorized(){return sessionStorage.getItem(OWNER_SESSION)==='active';}
+  function normalizedPhone(value){let phone=String(value||'').replace(/[^0-9]/g,'');if(phone.startsWith('0'))phone='62'+phone.slice(1);else if(phone.startsWith('8'))phone='62'+phone;return phone;}
+  function currentCustomer(){
+    if(cloudMode)return cloudRole==='customer'?state.customers.find(item=>item.phone===cloudUser?.phone)||null:null;
+    const phone=sessionStorage.getItem(CUSTOMER_SESSION);return state.customers.find(item=>item.phone===phone)||null;
+  }
+  function ownerAuthorized(){return cloudMode?cloudRole==='owner':sessionStorage.getItem(OWNER_SESSION)==='active';}
   function openCart(){
     const rows=state.cart.map((item,index)=>'<article class="cart-line"><div><strong>'+item.weight+' g · '+escapeHTML(item.seasoningMode==='custom'?'Racik sendiri':'Signature Trio · rekomendasi owner')+'</strong><small>'+item.mix.map(row=>escapeHTML(row.name)+' '+fmtNumber(row.grams)+' g').join('<br>')+'<br>'+escapeHTML(seasoningLabel(item))+'<br>'+escapeHTML(totalSeasoningLabel(item.weight,itemSeasonings(item)))+' · '+item.qty+' pouch</small></div><div class="cart-line-actions"><b>'+money(itemTotal(item))+'</b><div><button class="small-button" data-action="cart-qty" data-index="'+index+'" data-delta="-1">−</button> '+item.qty+' <button class="small-button" data-action="cart-qty" data-index="'+index+'" data-delta="1">+</button></div><button class="link-button" data-action="remove-cart" data-index="'+index+'">Hapus</button></div></article>').join('');
     const free=cartSubtotal()>=70000,shipping=shippingEstimate(0,cartSubtotal());
@@ -213,7 +241,7 @@
     const customer=currentCustomer();if(customer){renderCustomerProfile(customer);return;}
     if(ownerAuthorized()){renderAdmin(activeAdminTab);return;}
     const isRegister=activeStep==='register';
-    showModal('<div class="modal-eyebrow">AKUN · OPSIONAL</div><h2 class="modal-title" id="modalTitle">'+(isRegister?'Buat profil pelanggan':'Masuk dengan WhatsApp')+'</h2><p class="modal-lead">Gunakan nomor WhatsApp dan PIN untuk menyimpan alamat serta riwayat. Pemesanan tamu tetap bisa.</p><div class="tab-row"><button data-action="account-tab" data-tab="login" class="'+(!isRegister?'active':'')+'">Masuk</button><button data-action="account-tab" data-tab="register" class="'+(isRegister?'active':'')+'">Daftar</button></div><form id="customerForm">'+(isRegister?'<div class="field"><label for="profileName">Nama lengkap</label><input id="profileName" name="name" required maxlength="80"></div>':'')+'<div class="field"><label for="profileWa">Nomor WhatsApp</label><input id="profileWa" name="phone" inputmode="tel" required placeholder="08xxxxxxxxxx"></div><div class="field"><label for="profilePin">PIN 6 digit</label><input id="profilePin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required autocomplete="current-password"></div>'+(isRegister?'<div class="field"><label for="profileAddress">Alamat utama (opsional)</label><textarea id="profileAddress" name="address" rows="2"></textarea></div>':'')+'<button class="button button-gold" type="submit">'+(isRegister?'Buat akun':'Masuk')+' ↗</button></form><div class="warning-note">Akun demo ini tersimpan hanya di browser/perangkat ini.</div>');
+    showModal('<div class="modal-eyebrow">AKUN · OPSIONAL</div><h2 class="modal-title" id="modalTitle">'+(isRegister?'Buat profil pelanggan':'Masuk dengan WhatsApp')+'</h2><p class="modal-lead">Gunakan nomor WhatsApp dan PIN untuk menyimpan alamat serta riwayat. Pemesanan tamu tetap bisa.</p><div class="tab-row"><button data-action="account-tab" data-tab="login" class="'+(!isRegister?'active':'')+'">Masuk</button><button data-action="account-tab" data-tab="register" class="'+(isRegister?'active':'')+'">Daftar</button></div><form id="customerForm">'+(isRegister?'<div class="field"><label for="profileName">Nama lengkap</label><input id="profileName" name="name" required maxlength="80"></div>':'')+'<div class="field"><label for="profileWa">Nomor WhatsApp</label><input id="profileWa" name="phone" inputmode="tel" required placeholder="08xxxxxxxxxx"></div><div class="field"><label for="profilePin">PIN 6 digit</label><input id="profilePin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required autocomplete="current-password"></div>'+(isRegister?'<div class="field"><label for="profileAddress">Alamat utama (opsional)</label><textarea id="profileAddress" name="address" rows="2"></textarea></div>':'')+'<button class="button button-gold" type="submit">'+(isRegister?'Buat akun':'Masuk')+' ↗</button></form><div class="warning-note">'+(cloudReady?'Akun dan alamat tersimpan online, bisa dibuka di perangkat lain.':'Akun hanya dapat digunakan setelah server tersambung.')+'</div>');
   }
   function renderCustomerProfile(customer){
     const addresses=(customer.addresses||[]).map((address,index)=>'<div class="account-address"><p>'+escapeHTML(address)+'</p><button data-action="remove-address" data-index="'+index+'">Hapus</button></div>').join('')||'<p class="admin-empty">Belum ada alamat tersimpan.</p>';
@@ -245,6 +273,20 @@
   async function handleCustomerForm(form){
     const data=new FormData(form),phone=normalizedPhone(data.get('phone')),pin=String(data.get('pin')||'');
     if(phone.length<8||phone.length>15){toast('Periksa nomor WhatsApp.');return;}
+    if(CLOUD.enabled&&!cloudReady){toast('Server belum tersambung. Coba lagi setelah koneksi pulih.');return;}
+    if(cloudReady){
+      try{
+        if(activeStep==='register'){
+          const user=await CLOUD.registerCustomer({phone,pin,name:String(data.get('name')||'').trim(),address:String(data.get('address')||'').trim()});
+          applyCloudData(user);closeModal();toast('Akun tersimpan online dan bisa dibuka di perangkat lain.');return;
+        }
+        const result=await CLOUD.login({phone,pin});
+        if(result.user.role==='owner'){
+          applyCloudData(result.user,result.ownerData);activeAdminTab='orders';renderAdmin('orders');toast('Berhasil masuk ke dashboard pemilik.');return;
+        }
+        applyCloudData(result.user);closeModal();toast('Berhasil masuk. Alamat dan riwayat tersimpan online.');return;
+      }catch(error){toast(error.message);return;}
+    }
     let customer=state.customers.find(item=>item.phone===phone);
     if(activeStep==='register'){
       if(customer){toast('Nomor ini sudah terdaftar. Silakan masuk.');activeStep='login';openAccount();return;}
@@ -256,33 +298,60 @@
     if(!customer||await hashPin(pin,customer.salt)!==customer.pinHash){toast('Nomor WhatsApp atau PIN tidak cocok.');return;}
     sessionStorage.setItem(CUSTOMER_SESSION,phone);closeModal();toast('Berhasil masuk. Alamat tersimpan siap digunakan.');
   }
-  function ownerAccount(){try{return JSON.parse(localStorage.getItem(OWNER_STORE)||'null');}catch(_){return null;}}
+  function ownerAccount(){
+    if(cloudMode)return cloudRole==='owner'?(state.owner||cloudUser):null;
+    try{return JSON.parse(localStorage.getItem(OWNER_STORE)||'null');}catch(_){return null;}
+  }
   function openOwner(){
     if(ownerAuthorized()){renderAdmin(activeAdminTab);return;}
+    if(CLOUD.enabled&&!cloudReady){showModal('<div class="modal-eyebrow">AKUN PEMILIK</div><h2 class="modal-title" id="modalTitle">Server belum siap</h2><p class="modal-lead">Hubungkan D1 ke Worker terlebih dahulu. Akun pemilik belum dapat dibuat sebelum server tersambung.</p><button class="button button-quiet" data-action="close">Tutup</button>');return;}
     const account=ownerAccount();
-    if(!account){
-      showModal('<div class="modal-eyebrow">AKUN PEMILIK KHUSUS</div><h2 class="modal-title" id="modalTitle">Buat akun pemilik</h2><p class="modal-lead">Akun ini untuk pesanan, stok, konten, dan laporan keuangan. Daftarkan WhatsApp pemilik dan PIN 6 digit.</p><form id="ownerSetupForm"><div class="field"><label for="ownerName">Nama pemilik</label><input id="ownerName" name="name" required maxlength="80"></div><div class="field"><label for="ownerPhone">WhatsApp pemilik</label><input id="ownerPhone" name="phone" inputmode="tel" required placeholder="08xxxxxxxxxx"></div><div class="field"><label for="ownerPin">PIN pemilik · 6 digit</label><input id="ownerPin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required autocomplete="new-password"></div><div class="field"><label for="ownerPinConfirm">Ulangi PIN</label><input id="ownerPinConfirm" name="confirm" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required></div><button class="button button-gold" type="submit">Simpan akun pemilik ↗</button></form><div class="warning-note">Pendaftaran ini hanya membuat akun demo di browser ini. Hosting statis belum bisa mengunci akun secara aman atau menyinkronkan laporan lintas perangkat.</div>');return;
+    if(cloudMode&&!cloudOwnerExists){
+      showModal('<div class="modal-eyebrow">AKUN PEMILIK KHUSUS</div><h2 class="modal-title" id="modalTitle">Daftarkan akun pemilik</h2><p class="modal-lead">Buat satu akun dengan nomor WhatsApp admin dan PIN 6 digit. Pendaftaran hanya tersedia sekali dan perlu kode aktivasi sekali pakai dari pengaturan Cloudflare.</p><form id="ownerSetupForm"><div class="field"><label for="ownerName">Nama pemilik</label><input id="ownerName" name="name" required maxlength="80"></div><div class="field"><label for="ownerPhone">WhatsApp pemilik</label><input id="ownerPhone" name="phone" inputmode="tel" required placeholder="08xxxxxxxxxx"></div><div class="field"><label for="ownerPin">PIN pemilik · 6 digit</label><input id="ownerPin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required autocomplete="new-password"></div><div class="field"><label for="ownerPinConfirm">Ulangi PIN</label><input id="ownerPinConfirm" name="confirm" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required></div><div class="field"><label for="ownerSetupCode">Kode aktivasi sekali pakai</label><input id="ownerSetupCode" name="setupCode" type="password" required autocomplete="off"></div><button class="button button-gold" type="submit">Simpan akun pemilik ↗</button></form><div class="warning-note">Kode ini hanya untuk pendaftaran pertama. Sesudah akun dibuat, masuk berikutnya cukup dengan WhatsApp dan PIN.</div>');return;
     }
-    showModal('<div class="modal-eyebrow">AKUN PEMILIK</div><h2 class="modal-title" id="modalTitle">Masuk ke dashboard</h2><p class="modal-lead">WhatsApp pemilik: '+escapeHTML(account.phone)+' · gunakan PIN 6 digit.</p><form id="ownerLoginForm"><div class="field"><label for="ownerPhone">Nomor WhatsApp</label><input id="ownerPhone" name="phone" inputmode="tel" required value="'+escapeHTML(account.phone)+'"></div><div class="field"><label for="ownerPin">PIN pemilik</label><input id="ownerPin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required autocomplete="current-password"></div><button class="button button-gold" type="submit">Masuk ke dashboard ↗</button></form><div class="warning-note">Ini akun demo browser. Untuk akun pemilik yang aman di website publik, hubungkan backend autentikasi.</div>');
+    if(!account&&!cloudMode){
+      showModal('<div class="modal-eyebrow">AKUN PEMILIK KHUSUS</div><h2 class="modal-title" id="modalTitle">Buat akun pemilik</h2><p class="modal-lead">Akun ini untuk pesanan, stok, konten, dan laporan keuangan. Daftarkan WhatsApp pemilik dan PIN 6 digit.</p><form id="ownerSetupForm"><div class="field"><label for="ownerName">Nama pemilik</label><input id="ownerName" name="name" required maxlength="80"></div><div class="field"><label for="ownerPhone">WhatsApp pemilik</label><input id="ownerPhone" name="phone" inputmode="tel" required placeholder="08xxxxxxxxxx"></div><div class="field"><label for="ownerPin">PIN pemilik · 6 digit</label><input id="ownerPin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required autocomplete="new-password"></div><div class="field"><label for="ownerPinConfirm">Ulangi PIN</label><input id="ownerPinConfirm" name="confirm" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required></div><button class="button button-gold" type="submit">Simpan akun pemilik ↗</button></form><div class="warning-note">Akun demo tersimpan di browser ini saja.</div>');return;
+    }
+    showModal('<div class="modal-eyebrow">AKUN PEMILIK</div><h2 class="modal-title" id="modalTitle">Masuk ke dashboard</h2><p class="modal-lead">Masuk dengan nomor WhatsApp dan PIN pemilik.</p><form id="ownerLoginForm"><div class="field"><label for="ownerPhone">Nomor WhatsApp</label><input id="ownerPhone" name="phone" inputmode="tel" required value="'+escapeHTML(account?.phone||'')+'"></div><div class="field"><label for="ownerPin">PIN pemilik</label><input id="ownerPin" name="pin" type="password" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required autocomplete="current-password"></div><button class="button button-gold" type="submit">Masuk ke dashboard ↗</button></form><div class="warning-note">Data pesanan dan laporan hanya tampil setelah pemilik masuk.</div>');
   }
   async function handleOwnerSetup(form){
     const data=new FormData(form),phone=normalizedPhone(data.get('phone')),pin=String(data.get('pin')||'');
-    if(ownerAccount()){toast('Akun pemilik sudah dibuat di browser ini.');return;}
     if(phone.length<8||phone.length>15||pin.length!==6){toast('Isi WhatsApp valid dan PIN 6 digit.');return;}
     if(pin!==String(data.get('confirm')||'')){toast('PIN belum sama.');return;}
+    if(CLOUD.enabled&&!cloudReady){toast('Server belum tersambung. Akun tidak disimpan. Coba lagi nanti.');return;}
+    if(cloudReady){
+      try{const ownerData=await CLOUD.registerOwner({name:String(data.get('name')||'Pemilik').trim(),phone,pin,setupCode:String(data.get('setupCode')||'')});applyCloudData(CLOUD.user,ownerData);activeAdminTab='orders';renderAdmin('orders');toast('Akun pemilik dan dashboard tersimpan online. Hapus kode aktivasi di Cloudflare sekarang.');}
+      catch(error){toast(error.message);}return;
+    }
+    if(ownerAccount()){toast('Akun pemilik sudah dibuat di browser ini.');return;}
     const salt=randomSalt(),account={name:String(data.get('name')||'Pemilik').trim(),phone,salt,pinHash:await hashPin(pin,salt)};
     localStorage.setItem(OWNER_STORE,JSON.stringify(account));sessionStorage.setItem(OWNER_SESSION,'active');closeModal();renderAdmin('orders');toast('Akun pemilik demo berhasil dibuat.');
   }
   async function handleOwnerLogin(form){
     const data=new FormData(form),account=ownerAccount(),phone=normalizedPhone(data.get('phone')),pin=String(data.get('pin')||'');
+    if(CLOUD.enabled&&!cloudReady){toast('Server belum tersambung. Coba masuk lagi nanti.');return;}
+    if(cloudReady){
+      try{const result=await CLOUD.login({phone,pin});if(result.user.role!=='owner'){await CLOUD.logout();toast('Nomor tersebut bukan akun pemilik.');return;}applyCloudData(result.user,result.ownerData);activeAdminTab='orders';renderAdmin('orders');toast('Berhasil masuk ke dashboard pemilik.');}
+      catch(error){toast(error.message);}return;
+    }
     if(!account||phone!==account.phone||await hashPin(pin,account.salt)!==account.pinHash){toast('WhatsApp atau PIN pemilik tidak cocok.');return;}
     sessionStorage.setItem(OWNER_SESSION,'active');activeAdminTab='orders';renderAdmin('orders');toast('Berhasil masuk ke dashboard pemilik.');
   }
   function itemCopy(item){return {...item,mix:item.mix.map(row=>({...row}))};}
-  function submitOrder(form){
+  async function submitOrder(form){
     const data=new FormData(form),customer=currentCustomer(),packages=cartPackages(),deliveryDate=estimateDelivery(packages);
     const address=String(data.get('address')||'').trim(),name=String(data.get('name')||'').trim(),phone=normalizedPhone(data.get('phone'));
     if(!address||!name||phone.length<8){toast('Isi nama, WhatsApp, dan alamat lengkap.');return;}
+    if(CLOUD.enabled&&!cloudReady){toast('Server belum tersambung. Pesanan belum dikirim; coba lagi setelah beberapa saat.');return;}
+    if(cloudReady){
+      try{
+        const saved=await CLOUD.placeOrder({name,phone,address,note:String(data.get('note')||'').trim(),saveAddress:Boolean(customer&&data.get('saveAddress')),items:state.cart});
+        const order=saved.order;state.stock=saved.stock;state.orders.unshift(order);
+        if(customer&&data.get('saveAddress')){customer.name=name;if(!customer.addresses.includes(address))customer.addresses.unshift(address);}
+        state.cart=[];try{localStorage.setItem(STORE,JSON.stringify(state));}catch(_){}
+        updateCartUi();renderCrackers();closeModal();openPayment(order.id);return;
+      }catch(error){toast(error.message);return;}
+    }
     const subtotal=cartSubtotal(),shipping=shippingEstimate(0,subtotal),id='KSB-'+todayISO().replace(/-/g,'')+'-'+Math.random().toString(36).slice(2,6).toUpperCase(),now=new Date();
     const items=state.cart.map(item=>({...itemCopy(item),unitCost:totalHpp(item)}));
     for(const item of items){for(const part of item.mix){const used=part.grams*item.qty;if(stockGrams(part.id)<used){toast('Stok '+part.name+' kurang. Pemilik perlu memperbarui stok.');return;}}}
@@ -302,17 +371,28 @@
     const order=state.orders.find(item=>item.id===id),file=$('#proofFile')?.files?.[0],payer=String($('#payerName')?.value||'').trim();if(!order)return;
     if(!payer){toast('Isi nama pengirim pembayaran.');$('#payerName').focus();return;}
     if(!file&&!order.proof){toast('Pilih foto bukti pembayaran.');return;}
-    order.payerName=payer;
-    if(file){if(!file.type.startsWith('image/')){toast('Bukti pembayaran harus berupa gambar.');return;}try{order.proof=await compressImage(file);}catch(_){toast('Foto bukti tidak dapat dibaca.');return;}}
+    if(CLOUD.enabled&&!cloudReady){toast('Server belum tersambung. Bukti belum dikirim; coba lagi setelah koneksi pulih.');return;}
+    let proof=order.proof;
+    if(file){if(!file.type.startsWith('image/')){toast('Bukti pembayaran harus berupa gambar.');return;}try{proof=await compressImage(file,900,.68);}catch(_){toast('Foto bukti tidak dapat dibaca.');return;}}
+    if(cloudReady){
+      try{const saved=await CLOUD.submitPayment(id,{phone:order.customerPhone,payerName:payer,proof});Object.assign(order,saved.order);try{localStorage.setItem(STORE,JSON.stringify(state));}catch(_){}openPayment(id);toast('Bukti pembayaran tersimpan online.');}
+      catch(error){toast(error.message);}return;
+    }
+    order.payerName=payer;order.proof=proof;
     order.paymentStatus='Menunggu verifikasi';order.status='Menunggu verifikasi pembayaran';persist();openPayment(id);toast('Bukti tersimpan di browser demo.');
   }
   function openReceipt(id){
     const order=state.orders.find(item=>item.id===id);if(!order){toast('Pesanan tidak ditemukan.');return;}
     const itemRows=order.items.map(item=>'<tr><td>'+item.weight+' g · '+escapeHTML(item.seasoningMode==='custom'?'Racik sendiri':'Signature Trio · rekomendasi owner')+'<small>'+item.mix.map(row=>escapeHTML(row.name)+' '+fmtNumber(row.grams)+' g').join('<br>')+'<br>'+escapeHTML(seasoningLabel(item))+'<br>'+escapeHTML(totalSeasoningLabel(item.weight,itemSeasonings(item)))+'</small></td><td>'+item.qty+' pouch</td><td>'+money(item.price)+'</td><td>'+money(itemTotal(item))+'</td></tr>').join('');
-    showModal('<div class="receipt-head"><img src="'+escapeHTML(brandImage())+'" alt="Logo usaha"><div><strong>KERUPUK SEBLAK BANDUNG PREMIUM</strong><small>Kriuk Bandung · Semangat untuk mandiri</small></div></div><h2 class="modal-title" id="modalTitle" style="margin-top:18px">Struk pesanan</h2><div class="receipt-meta"><span>'+escapeHTML(new Date(order.createdAt).toLocaleString('id-ID'))+'</span><b>'+escapeHTML(order.id)+'</b></div><div class="receipt-box"><b>Pengantaran:</b> '+escapeHTML(dateLabel(order.deliveryDate))+'<br><b>Penerima:</b> '+escapeHTML(order.customerName)+'<br><b>WhatsApp:</b> '+escapeHTML(order.customerPhone)+'<br><b>Alamat:</b> '+escapeHTML(order.address)+'</div><div class="finance-table-wrap"><table class="finance-table"><thead><tr><th>Racikan</th><th>Jumlah</th><th>Harga</th><th>Total</th></tr></thead><tbody>'+itemRows+'</tbody></table></div><div class="modal-summary"><div class="summary-row"><span>Subtotal produk</span><b>'+money(order.subtotal)+'</b></div><div class="summary-row"><span>Ongkir</span><b>'+(order.shipping?money(order.shipping):'Gratis')+'</b></div><div class="summary-row total"><span>Total</span><b>'+money(order.total)+'</b></div></div><div class="receipt-status">Pembayaran: '+escapeHTML(order.paymentStatus)+'<br>Status: '+escapeHTML(order.status)+'</div><div class="receipt-actions"><button class="button button-gold" data-action="print">Cetak / simpan PDF</button><button class="button button-quiet" data-action="payment" data-id="'+escapeHTML(id)+'">Pembayaran</button></div><p class="field-hint">Struk demo ini tersimpan pada browser tempat pesanan dibuat.</p>');
+    showModal('<div class="receipt-head"><img src="'+escapeHTML(brandImage())+'" alt="Logo usaha"><div><strong>KERUPUK SEBLAK BANDUNG PREMIUM</strong><small>Kriuk Bandung · Semangat untuk mandiri</small></div></div><h2 class="modal-title" id="modalTitle" style="margin-top:18px">Struk pesanan</h2><div class="receipt-meta"><span>'+escapeHTML(new Date(order.createdAt).toLocaleString('id-ID'))+'</span><b>'+escapeHTML(order.id)+'</b></div><div class="receipt-box"><b>Pengantaran:</b> '+escapeHTML(dateLabel(order.deliveryDate))+'<br><b>Penerima:</b> '+escapeHTML(order.customerName)+'<br><b>WhatsApp:</b> '+escapeHTML(order.customerPhone)+'<br><b>Alamat:</b> '+escapeHTML(order.address)+'</div><div class="finance-table-wrap"><table class="finance-table"><thead><tr><th>Racikan</th><th>Jumlah</th><th>Harga</th><th>Total</th></tr></thead><tbody>'+itemRows+'</tbody></table></div><div class="modal-summary"><div class="summary-row"><span>Subtotal produk</span><b>'+money(order.subtotal)+'</b></div><div class="summary-row"><span>Ongkir</span><b>'+(order.shipping?money(order.shipping):'Gratis')+'</b></div><div class="summary-row total"><span>Total</span><b>'+money(order.total)+'</b></div></div><div class="receipt-status">Pembayaran: '+escapeHTML(order.paymentStatus)+'<br>Status: '+escapeHTML(order.status)+'</div><div class="receipt-actions"><button class="button button-gold" data-action="print">Cetak / simpan PDF</button><button class="button button-quiet" data-action="payment" data-id="'+escapeHTML(id)+'">Pembayaran</button></div><p class="field-hint">'+(cloudReady?'Nomor struk ini dapat dicek kembali di website dari perangkat lain.':'Struk demo tersimpan pada browser tempat pesanan dibuat.')+'</p>');
   }
-  function openTrack(){showModal('<div class="modal-eyebrow">CEK PESANAN</div><h2 class="modal-title" id="modalTitle">Pesananmu sampai mana?</h2><p class="modal-lead">Masukkan nomor pesanan dari struk. Pelanggan yang masuk akun juga dapat melihat riwayat pesanan pada Akun Saya.</p><form id="trackForm"><div class="field"><label for="trackId">Nomor pesanan</label><input id="trackId" name="id" placeholder="KSB-20261112-ABCD" required></div><button class="button button-gold" type="submit">Cari pesanan ↗</button></form>');}
-  function showTrackResult(id){const order=state.orders.find(item=>item.id.toLowerCase()===String(id).trim().toLowerCase());if(!order){toast('Nomor tidak ditemukan pada browser ini.');return;}showModal('<div class="modal-eyebrow">STATUS PESANAN</div><h2 class="modal-title" id="modalTitle">'+escapeHTML(order.id)+'</h2><div class="receipt-status">'+escapeHTML(order.status)+'<br>Pembayaran: '+escapeHTML(order.paymentStatus)+'<br>Estimasi antar: '+escapeHTML(dateLabel(order.deliveryDate))+'</div><div class="modal-actions"><button class="small-button" data-action="receipt" data-id="'+escapeHTML(order.id)+'">Lihat struk</button><button class="button button-quiet" data-action="close">Tutup</button></div>');}
+  function openTrack(){const customer=currentCustomer();showModal('<div class="modal-eyebrow">CEK PESANAN</div><h2 class="modal-title" id="modalTitle">Pesananmu sampai mana?</h2><p class="modal-lead">Masukkan nomor pesanan dari struk. Untuk pesanan tanpa akun, isi juga nomor WhatsApp yang dipakai saat memesan.</p><form id="trackForm"><div class="field"><label for="trackId">Nomor pesanan</label><input id="trackId" name="id" placeholder="KSB-20261112-ABC123" required></div>'+(customer?'':'<div class="field"><label for="trackPhone">Nomor WhatsApp pemesan</label><input id="trackPhone" name="phone" inputmode="tel" required placeholder="08xxxxxxxxxx"></div>')+'<button class="button button-gold" type="submit">Cari pesanan ↗</button></form>');}
+  async function showTrackResult(id,phone=''){
+    let order=state.orders.find(item=>item.id.toLowerCase()===String(id).trim().toLowerCase());
+    if(cloudReady){try{const result=await CLOUD.lookupOrder(String(id).trim(),phone||currentCustomer()?.phone||'');order=result.order;if(!state.orders.some(item=>item.id===order.id))state.orders.unshift(order);}catch(error){toast(error.message);return;}}
+    if(!order){toast('Nomor pesanan tidak ditemukan.');return;}
+    showModal('<div class="modal-eyebrow">STATUS PESANAN</div><h2 class="modal-title" id="modalTitle">'+escapeHTML(order.id)+'</h2><div class="receipt-status">'+escapeHTML(order.status)+'<br>Pembayaran: '+escapeHTML(order.paymentStatus)+'<br>Estimasi antar: '+escapeHTML(dateLabel(order.deliveryDate))+'</div><div class="modal-actions"><button class="small-button" data-action="receipt" data-id="'+escapeHTML(order.id)+'">Lihat struk</button><button class="small-button" data-action="payment" data-id="'+escapeHTML(order.id)+'">Pembayaran</button><button class="button button-quiet" data-action="close">Tutup</button></div>');
+  }
 
   function adminStats(){const paid=state.orders.filter(order=>order.paymentStatus==='Lunas terkonfirmasi'&&!order.excludedFromFinance);return {orders:state.orders.length,pending:state.orders.filter(order=>order.paymentStatus!=='Lunas terkonfirmasi'&&order.status!=='Dibatalkan').length,revenue:paid.reduce((s,o)=>s+Number(o.subtotal||0),0),packages:paid.reduce((s,o)=>s+Number(o.packages||0),0)};}
   function renderAdmin(tab='orders'){
@@ -320,7 +400,7 @@
     const tabs=[['orders','Pesanan'],['finance','Keuangan'],['settings','Pengaturan']].map(([key,label])=>'<button data-action="admin-tab" data-tab="'+key+'" class="'+(tab===key?'active':'')+'">'+label+'</button>').join(''),stats=adminStats();
     const overview='<div class="admin-kpis"><div class="admin-kpi"><small>Total pesanan</small><strong>'+stats.orders+'</strong></div><div class="admin-kpi"><small>Menunggu verifikasi</small><strong>'+stats.pending+'</strong></div><div class="admin-kpi"><small>Omzet produk lunas</small><strong>'+money(stats.revenue)+'</strong></div><div class="admin-kpi"><small>Pouch terjual</small><strong>'+stats.packages+'</strong></div></div>';
     const body=tab==='orders'?renderAdminOrders():tab==='finance'?renderFinance():renderSettings();
-    showModal('<div class="modal-eyebrow">DASHBOARD PEMILIK · '+escapeHTML(ownerAccount()?.name||'Pemilik')+'</div><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2 class="modal-title" id="modalTitle">Ruang pemilik</h2><button class="small-button" data-action="owner-logout">Keluar akun</button></div>'+overview+'<div class="tab-row">'+tabs+'</div><div class="admin-content">'+body+'</div><div class="warning-note">Data demo disimpan di browser ini saja. Pesanan pelanggan dari perangkat lain tidak tersinkron.</div>',true);
+    showModal('<div class="modal-eyebrow">DASHBOARD PEMILIK · '+escapeHTML(ownerAccount()?.name||'Pemilik')+'</div><div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><h2 class="modal-title" id="modalTitle">Ruang pemilik</h2><button class="small-button" data-action="owner-logout">Keluar akun</button></div>'+overview+'<div class="tab-row">'+tabs+'</div><div class="admin-content">'+body+'</div><div class="warning-note">'+(cloudReady?'Data pesanan dan laporan tersimpan bersama di Cloudflare D1.':'Data demo hanya tersimpan di browser ini.')+'</div>',true);
   }
   function renderAdminOrders(){
     if(!state.orders.length)return '<div class="admin-empty">Belum ada pesanan. Pesanan pelanggan demo akan muncul di sini.</div>';
@@ -378,32 +458,55 @@
       for(const item of INGREDIENTS){const file=$('input[name="ingredientFile_'+item.id+'"]',form).files?.[0];if(file)s.ingredientImages[item.id]=await compressImage(file,240,.86);}
       for(const item of PRODUCTS){const file=$('input[name="productFile_'+item.id+'"]',form).files?.[0];if(file)s.productImages[item.id]=await compressImage(file,720,.66);}
     }catch(_){toast('Salah satu foto gagal dibaca; pengaturan lain tersimpan.');}
-    persist();renderBrandImages();if(s.heroImage) $('.hero-visual>img').src=s.heroImage;renderBuilder();renderAdmin('settings');toast('Pengaturan, logo, ikon, dan stok diperbarui di browser ini.');
+    if(CLOUD.enabled&&!cloudReady){toast('Server belum tersambung. Pengaturan belum disimpan.');return;}
+    if(cloudReady){
+      try{const saved=await CLOUD.saveOwnerState({settings:state.settings,stock:state.stock,ledger:state.ledger});state.settings={...state.settings,...saved.settings};state.stock={...saved.stock};state.ledger=saved.ledger||[];try{localStorage.setItem(STORE,JSON.stringify(state));}catch(_){} }
+      catch(error){toast('Pengaturan gagal tersimpan: '+error.message);return;}
+    }else persist();
+    renderBrandImages();if(s.heroImage) $('.hero-visual>img').src=s.heroImage;renderBuilder();renderAdmin('settings');toast(cloudReady?'Pengaturan, logo, ikon, dan stok tersimpan online.':'Pengaturan demo tersimpan di browser ini.');
   }
   async function updateOwnerProfile(form){
     const data=new FormData(form),account=ownerAccount(),phone=normalizedPhone(data.get('phone')),pin=String(data.get('pin')||'');if(!account)return;
     if(phone.length<8||phone.length>15){toast('Nomor WhatsApp pemilik tidak valid.');return;}
+    if(cloudReady){
+      try{const result=await CLOUD.updateOwnerProfile({name:String(data.get('name')||'Pemilik').trim(),phone,pin});state.owner=result.owner;cloudUser={...cloudUser,...result.owner};renderAdmin('settings');toast('Akun pemilik diperbarui di server.');}
+      catch(error){toast(error.message);}return;
+    }
     account.name=String(data.get('name')||'Pemilik').trim();account.phone=phone;if(pin){if(pin.length!==6){toast('PIN baru harus 6 digit.');return;}account.salt=randomSalt();account.pinHash=await hashPin(pin,account.salt);}
     localStorage.setItem(OWNER_STORE,JSON.stringify(account));renderAdmin('settings');toast('Akun pemilik demo diperbarui.');
   }
-  function addLedger(form){const data=new FormData(form),amount=Math.max(0,Number(data.get('amount')||0));if(!amount){toast('Masukkan nominal yang lebih dari nol.');return;}state.ledger.push({id:'FIN-'+Date.now().toString(36),type:String(data.get('type')),date:String(data.get('date')||todayISO()),amount,category:String(data.get('category')||'').trim()});persist();renderAdmin('finance');toast('Catatan keuangan tersimpan.');}
-  function setOrderStatus(id,status){const order=state.orders.find(item=>item.id===id);if(!order)return;order.status=status;if(status==='Selesai'&&!order.deliveredAt)order.deliveredAt=new Date().toISOString();persist();toast('Status pesanan diperbarui.');}
-  function toggleFinanceExclusion(id){
+  async function addLedger(form){const data=new FormData(form),amount=Math.max(0,Number(data.get('amount')||0));if(!amount){toast('Masukkan nominal yang lebih dari nol.');return;}if(CLOUD.enabled&&!cloudReady){toast('Server belum tersambung. Catatan belum disimpan.');return;}const entry={id:'FIN-'+Date.now().toString(36),type:String(data.get('type')),date:String(data.get('date')||todayISO()),amount,category:String(data.get('category')||'').trim()};if(cloudReady){try{const result=await CLOUD.addLedger(entry);state.ledger=result.ledger;}catch(error){toast(error.message);return;}}else{state.ledger.unshift(entry);persist();}renderAdmin('finance');toast('Catatan keuangan tersimpan.');}
+  async function setOrderStatus(id,status){const order=state.orders.find(item=>item.id===id);if(!order)return;const patch={status};if(status==='Selesai'&&!order.deliveredAt)patch.deliveredAt=new Date().toISOString();if(cloudReady){try{const result=await CLOUD.updateOrder(id,patch);Object.assign(order,result.order);}catch(error){toast(error.message);return;}}else{Object.assign(order,patch);persist();}toast('Status pesanan diperbarui.');}
+  async function toggleFinanceExclusion(id){
     if(!ownerAuthorized()){openOwner();return;}
     const order=state.orders.find(item=>item.id===id);if(!order)return;
     if(order.excludedFromFinance){if(!window.confirm('Masukkan kembali pesanan '+order.id+' ke laporan keuangan?'))return;order.excludedFromFinance=false;delete order.financeExclusionReason;delete order.financeExcludedAt;}
     else{const reason=window.prompt('Alasan mengecualikan pesanan '+order.id+' dari laporan keuangan (contoh: pesanan uji atau data keliru):','');if(reason===null)return;if(!reason.trim()){toast('Isi alasan koreksi agar perubahan tercatat.');return;}order.excludedFromFinance=true;order.financeExclusionReason=reason.trim();order.financeExcludedAt=new Date().toISOString();}
-    persist();renderAdmin(activeAdminTab);toast(order.excludedFromFinance?'Pesanan dikecualikan dari laporan; riwayat pesanan tetap tersimpan.':'Pesanan dimasukkan kembali ke laporan.');
+    if(cloudReady){try{const result=await CLOUD.updateOrder(id,{excludedFromFinance:order.excludedFromFinance,financeExclusionReason:order.financeExclusionReason||'',financeExcludedAt:order.financeExcludedAt||''});Object.assign(order,result.order);}catch(error){toast(error.message);return;}}
+    else persist();renderAdmin(activeAdminTab);toast(order.excludedFromFinance?'Pesanan dikecualikan dari laporan; riwayat pesanan tetap tersimpan.':'Pesanan dimasukkan kembali ke laporan.');
   }
-  function setCourierCost(id,value){const order=state.orders.find(item=>item.id===id);if(!order)return;order.courierActualCost=value===''?null:Math.max(0,Number(value)||0);persist();}
-  function confirmPayment(id){if(!ownerAuthorized()){openOwner();return;}const order=state.orders.find(item=>item.id===id);if(!order)return;order.paymentStatus='Lunas terkonfirmasi';order.paidAt=new Date().toISOString();if(order.status==='Menunggu pembayaran'||order.status==='Menunggu verifikasi pembayaran')order.status='Pembayaran diverifikasi';persist();renderAdmin(activeAdminTab);toast('Pembayaran dikonfirmasi pemilik.');}
-  function saveCustomerAddress(form){const customer=currentCustomer(),address=String(new FormData(form).get('address')||'').trim();if(!customer||!address)return;if(!customer.addresses.includes(address))customer.addresses.unshift(address);persist();renderCustomerProfile(customer);toast('Alamat disimpan.');}
+  async function setCourierCost(id,value){const order=state.orders.find(item=>item.id===id);if(!order)return;const courierActualCost=value===''?null:Math.max(0,Number(value)||0);if(cloudReady){try{const result=await CLOUD.updateOrder(id,{courierActualCost});Object.assign(order,result.order);}catch(error){toast(error.message);}}else{order.courierActualCost=courierActualCost;persist();}}
+  async function confirmPayment(id){if(!ownerAuthorized()){openOwner();return;}const order=state.orders.find(item=>item.id===id);if(!order)return;const patch={paymentStatus:'Lunas terkonfirmasi',paidAt:new Date().toISOString()};if(order.status==='Menunggu pembayaran'||order.status==='Menunggu verifikasi pembayaran')patch.status='Pembayaran diverifikasi';if(cloudReady){try{const result=await CLOUD.updateOrder(id,patch);Object.assign(order,result.order);}catch(error){toast(error.message);return;}}else{Object.assign(order,patch);persist();}renderAdmin(activeAdminTab);toast('Pembayaran dikonfirmasi pemilik.');}
+  async function saveCustomerAddress(form){const customer=currentCustomer(),address=String(new FormData(form).get('address')||'').trim();if(!customer||!address)return;if(CLOUD.enabled&&!cloudReady){toast('Server belum tersambung. Alamat belum disimpan.');return;}if(!customer.addresses.includes(address))customer.addresses.unshift(address);if(cloudReady){try{const result=await CLOUD.saveAddresses(customer.addresses);customer.addresses=result.addresses;}catch(error){toast(error.message);return;}}else persist();renderCustomerProfile(customer);toast('Alamat disimpan.');}
+  async function deleteLedgerEntry(id){if(cloudReady){try{const result=await CLOUD.deleteLedger(id);state.ledger=result.ledger;}catch(error){toast(error.message);return;}}else{state.ledger=state.ledger.filter(entry=>entry.id!==id);persist();}renderAdmin('finance');}
+  async function removeCustomerAddress(index){const customer=currentCustomer();if(!customer)return;customer.addresses.splice(index,1);if(cloudReady){try{const result=await CLOUD.saveAddresses(customer.addresses);customer.addresses=result.addresses;}catch(error){toast(error.message);return;}}else persist();renderCustomerProfile(customer);}
   function exportFinanceCSV(){
     const data=financeMetrics(dateStart,dateEnd),rows=[['Ringkasan','Nilai'],['Periode',dateStart+' sampai '+dateEnd],['Penjualan produk lunas',data.productRevenue],['Ongkir diterima',data.shippingRevenue],['HPP',data.cogs],['Biaya kurir tercatat',data.courier],['Biaya operasional',data.operational],['Laba bersih estimasi',data.net],['Kas masuk',data.cashIn],['Saldo akhir',data.cashEnd],[],['Tanggal','ID Pesanan','Pelanggan','Pouch','Produk','Ongkir','Status bayar','Status pesanan']];
     data.paid.forEach(order=>rows.push([String(order.paidAt||order.createdAt).slice(0,10),order.id,order.customerName,order.packages,order.subtotal,order.shipping,order.paymentStatus,order.status]));rows.push([],['Tanggal','Jenis catatan','Kategori','Nominal']);data.entries.forEach(entry=>rows.push([entry.date,entry.type,entry.category,entry.amount]));
     const csv='\ufeff'+rows.map(row=>row.map(cell=>'"'+String(cell??'').replace(/"/g,'""')+'"').join(',')).join('\r\n'),url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'})),link=document.createElement('a');link.href=url;link.download='laporan-kerupuk-seblak-'+dateStart+'-sampai-'+dateEnd+'.csv';link.click();URL.revokeObjectURL(url);
   }
-  function renderInitial(){renderBrandImages();if(state.settings.heroImage)$('.hero-visual>img').src=state.settings.heroImage;renderBuilder();updateCartUi();if(location.hash.toLowerCase()==='#pemilik')openOwner();}
+  async function renderInitial(){
+    renderBrandImages();if(state.settings.heroImage)$('.hero-visual>img').src=state.settings.heroImage;renderBuilder();updateCartUi();
+    if(CLOUD.enabled){
+      cloudMode=true;
+      try{const session=await CLOUD.initialize();applyCloudData(session.user,session.ownerData);}
+      catch(error){cloudReady=false;cloudMode=true;cloudRole=null;cloudUser=null;toast('Server belum tersambung: '+error.message);}
+    }
+    if(location.hash.toLowerCase()==='#pemilik')openOwner();
+  }
+  const canRefreshOwner=()=>cloudReady&&cloudRole==='owner'&&activeAdminTab!=='settings'&&!$('#modalBackdrop').hidden&&!document.activeElement.matches('input,select,textarea');
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&canRefreshOwner())refreshCloudOwner().catch(()=>{});});
+  setInterval(()=>{if(canRefreshOwner())refreshCloudOwner().catch(()=>{});},30000);
   window.addEventListener('hashchange',()=>{if(location.hash.toLowerCase()==='#pemilik')openOwner();});
   document.addEventListener('click',event=>{
     const button=event.target.closest('[data-action]');if(!button)return;const action=button.dataset.action;
@@ -412,7 +515,7 @@
     else if(action==='account'){activeStep='login';openAccount();}
     else if(action==='account-tab'){activeStep=button.dataset.tab;openAccount();}
     else if(action==='owner')openOwner();
-    else if(action==='owner-logout'){sessionStorage.removeItem(OWNER_SESSION);closeModal();toast('Keluar dari akun pemilik.');}
+    else if(action==='owner-logout'){if(cloudReady){CLOUD.logout().catch(()=>{});cloudRole=null;cloudUser=null;applyCloudData(null);}sessionStorage.removeItem(OWNER_SESSION);closeModal();toast('Keluar dari akun pemilik.');}
     else if(action==='admin-tab')renderAdmin(button.dataset.tab);
     else if(action==='cart')openCart();
     else if(action==='checkout')checkoutForm();
@@ -432,11 +535,11 @@
     else if(action==='track')openTrack();
     else if(action==='print')window.print();
     else if(action==='confirm-payment')confirmPayment(button.dataset.id);
-    else if(action==='delete-ledger'){state.ledger=state.ledger.filter(entry=>entry.id!==button.dataset.id);persist();renderAdmin('finance');}
+    else if(action==='delete-ledger')deleteLedgerEntry(button.dataset.id);
     else if(action==='finance-filter')toggleFinanceExclusion(button.dataset.id);
     else if(action==='export-csv')exportFinanceCSV();
-    else if(action==='logout-customer'){sessionStorage.removeItem(CUSTOMER_SESSION);closeModal();toast('Keluar dari akun pelanggan.');}
-    else if(action==='remove-address'){const customer=currentCustomer();if(customer){customer.addresses.splice(Number(button.dataset.index),1);persist();renderCustomerProfile(customer);}}
+    else if(action==='logout-customer'){if(cloudReady){CLOUD.logout().catch(()=>{});cloudRole=null;cloudUser=null;applyCloudData(null);}sessionStorage.removeItem(CUSTOMER_SESSION);closeModal();toast('Keluar dari akun pelanggan.');}
+    else if(action==='remove-address')removeCustomerAddress(Number(button.dataset.index));
   });
   document.addEventListener('change',event=>{
     const target=event.target;
@@ -454,7 +557,7 @@
     else if(form.id==='customerForm')handleCustomerForm(form);
     else if(form.id==='ownerSetupForm')handleOwnerSetup(form);
     else if(form.id==='ownerLoginForm')handleOwnerLogin(form);
-    else if(form.id==='trackForm')showTrackResult(new FormData(form).get('id'));
+    else if(form.id==='trackForm'){const data=new FormData(form);showTrackResult(data.get('id'),data.get('phone')||'');}
     else if(form.id==='ledgerForm')addLedger(form);
     else if(form.id==='settingsForm')saveSettings(form);
     else if(form.id==='ownerProfileForm')updateOwnerProfile(form);

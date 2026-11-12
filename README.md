@@ -1,4 +1,4 @@
-# Kerupuk Seblak Bandung Premium — prototipe website
+# Kerupuk Seblak Bandung Premium — website Worker + D1
 
 Website katalog dan pemesanan pre-order untuk Kerupuk Seblak Bandung Premium. Identitas visual memakai logo KSB dan warna burgundy–emas. Cerita merek berangkat dari tujuan pemilik sebagai mahasiswa untuk belajar mandiri dan kelak membantu orang tua menikmati hasil kerja keras mereka.
 
@@ -38,11 +38,11 @@ Untuk menjalankan server lokal, buka terminal pada folder ini lalu jalankan `npx
 
 Mode `Racik sendiri` menyediakan Bumbu Atom Bulan, kencur bubuk, cabai bubuk Aida, cabai rawit kering giling, bawang putih goreng halus, bumbu daun jeruk, bumbu BBQ, bumbu Jagung Bakar, bumbu Balado Pedas Manis, dan bumbu keju.
 
-## Batasan sebelum dipakai jualan
+## Menyiapkan penyimpanan online
 
-Ini prototipe frontend statis. Pesanan, akun, alamat, foto bukti, dan pengaturan tersimpan di browser/perangkat yang sedang dipakai; data tidak terkirim ke server dan tidak sinkron antarperangkat. Akses owner tidak ditampilkan di beranda. Untuk demo lokal, buka `#pemilik` untuk mendaftarkan WhatsApp + PIN. Karena nomor WhatsApp asli dan PIN owner belum diberikan, prototipe tidak menanam nomor atau PIN palsu di kode. Pendaftaran lokal ini bukan autentikasi aman: siapa pun yang mengetahui `#pemilik` sebelum akun lokal dibuat bisa mengklaimnya, dan data lokal bisa dibaca atau diubah dari perangkat tersebut.
+Kode ini sudah memiliki Cloudflare Worker dan D1 API. Sebelum pesanan nyata diterima, ikuti [petunjuk pemasangan Cloudflare](README-CLOUDFLARE.md): isi ID database pada `wrangler.jsonc`, jalankan skema `migrations/0001_init.sql`, unggah kode ini ke GitHub, dan deploy Worker. Setelah deploy, buat rahasia satu kali `OWNER_SETUP_CODE`, daftar pemilik, lalu hapus rahasia itu. Jangan deploy salinan lama tanpa Worker.
 
-Jangan gunakan prototipe statis ini untuk menerima transaksi nyata. Untuk jualan sungguhan lintas perangkat, perlu backend/database bersama dan autentikasi server, lalu akun pemilik dibuat di backend sebelum website publik dibuka. QRIS harus diunggah pada Pengaturan pemilik. Tarif pelanggan adalah Rp10.000 flat atau gratis saat subtotal produk mencapai Rp70.000. Harga berasal dari simulasi konsep; masukkan harga dan HPP aktual pada Pengaturan sebelum dipakai. Formula sendok adalah patokan yang perlu dites pada batch produk.
+Di situs Cloudflare yang sudah terhubung, akun dan pesanan pelanggan, alamat, bukti bayar, stok, logo/foto, pengaturan, serta laporan keuangan disimpan di D1 sehingga tersedia di HP dan laptop. Data demo lama di browser tidak dipindah otomatis. QRIS dan nama penerima pembayaran harus diisi oleh pemilik. Masukkan harga serta HPP aktual di Pengaturan; formula sendok adalah patokan yang perlu dites pada batch produk. Cloudflare Free memiliki batas pemakaian; jika batas tercapai, operasi database dapat gagal sementara.
 
 ## Foto dan kredit
 

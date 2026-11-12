@@ -1,0 +1,12 @@
+{
+  "name": "kerupuk-seblak-bandung-premium",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Kerupuk Seblak Bandung Premium - Cloudflare Worker, static assets, and D1 API",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.160.1"
+  }
+}
