@@ -1,25 +1,40 @@
 CARA UPDATE WEBSITE KERUPUK SEBLAK BANDUNG PREMIUM
 
-Paket ini hanya berisi file website/Worker yang berubah. File wrangler.jsonc sengaja tidak disertakan agar ID database D1 Anda tidak tertimpa.
+Update ini memakai database D1 yang sekarang. Jangan membuat database baru dan jangan mengganti wrangler.jsonc karena file itu berisi ID database milik Anda.
 
+LANGKAH 1 — TAMBAHKAN TABEL BARU KE DATABASE (SEKALI SAJA)
+1. Buka Cloudflare Dashboard.
+2. Pilih Workers & Pages, lalu pilih database D1 kerupuk-seblak-db yang dipakai website ini.
+3. Buka Console / SQL Console.
+4. Di folder update, buka migrations/0002_customer_admin_controls.sql dengan Notepad.
+5. Salin seluruh isi file SQL itu, tempel ke Console Cloudflare, lalu klik Execute / Run.
+6. Pastikan eksekusi berhasil. File ini hanya menambah tabel log aktivitas dan nomor blokir; akun, pesanan, stok, serta laporan lama tidak dihapus.
+7. Jangan jalankan migrations/0001_init.sql. Itu skema awal database dan tidak diperlukan untuk update ini.
+
+LANGKAH 2 — GANTI FILE WEBSITE DI REPOSITORY
 1. Unduh dan ekstrak kerupuk-seblak-update-2026-11-15.zip.
-2. Buka folder lokal repo GitHub: kerupuk-seblak-bandung-premium.
-3. Salin semua file hasil ekstrak langsung ke folder utama repo tersebut. Pilih Replace/Ganti untuk file yang namanya sama.
-4. Jangan menghapus atau mengganti wrangler.jsonc. Jangan menjalankan migration SQL lagi.
-5. Buka GitHub Desktop dan pilih repo kerupuk-seblak-bandung-premium.
-6. Periksa tab Changes. Pastikan file yang berubah adalah app-v2.js, cloud.js, worker.js, index.html, experience.css, README-CLOUDFLARE.md, dan CARA-UPDATE.txt.
-7. Di Summary, tulis: Perbaiki menu Android dan riwayat pesanan.
-8. Klik Commit to main, lalu klik Push origin.
-9. Buka Cloudflare Dashboard > Workers & Pages > kerupuk-seblak-bandung-premium > Deployments.
-10. Tunggu deployment baru berstatus Ready. Jika Cloudflare terhubung ke repo/branch main, proses ini berjalan setelah Push origin.
-11. Buka https://kerupuk-seblak-bandung-premium.nur-iqbal.workers.dev/ dan refresh. Di Android, buka tombol ☰ untuk melihat Pesanan saya dan Akun saya / buat akun.
+2. Buka folder repo lokal kerupuk-seblak-bandung-premium di File Explorer.
+3. Salin isi folder hasil ekstrak ke folder utama repo; pilih Replace / Ganti saat diminta.
+4. Jangan menimpa atau menghapus wrangler.jsonc. ZIP ini memang tidak menyertakannya agar ID D1 Anda tetap aman.
+5. Buka GitHub Desktop dan pastikan repo kerupuk-seblak-bandung-premium terpilih.
+6. Tinjau tab Changes. Isi Summary, misalnya: Rapikan dashboard dan kontrol akun pelanggan.
+7. Klik Commit to main, lalu Push origin.
 
-PERILAKU BARU
-- Tombol “Cek pesanan” diganti “Pesanan saya”. Pelanggan yang login melihat pesanan milik nomor WhatsApp akunnya dari perangkat lain setelah masuk. Riwayat tamu hanya tersimpan di browser/perangkat tempat mereka memesan.
-- Buat/masuk akun pelanggan dengan WhatsApp yang sama untuk melihat pesanan tamu lama di perangkat lain. Di perangkat bersama, gunakan akun PIN atau hapus riwayat tamu dari menu “Pesanan saya”; penghapusan ini hanya menghapus daftar lokal, bukan data admin.
-- Sebelum pesanan disiapkan dan pembayaran dikonfirmasi, pelanggan dapat mengubah nama penerima/alamat/catatan atau membatalkan. Isi produk/racikan diubah dengan membatalkan pesanan lalu membuat pesanan baru.
-- Pesanan selesai dan batal ada dalam arsip ringkas di dashboard pemilik. Pesanan selesai tetap masuk laporan bila pembayarannya terkonfirmasi. Pesanan batal tidak masuk laporan pemasukan dan stok dikembalikan.
-- Dari struk/pembayaran tersedia tombol WhatsApp Iqbal dan Rehan dengan ringkasan order terisi. Pelanggan tetap perlu menekan tombol Kirim di aplikasi WhatsApp.
-- Foto bagian “Belajar mandiri, bertumbuh bersama” dapat diganti dari Dashboard Pemilik > Pengaturan > Foto cerita usaha.
+LANGKAH 3 — TUNGGU WORKER DIPUBLIKASIKAN
+1. Di Cloudflare, buka Workers & Pages > kerupuk-seblak-bandung-premium > Deployments.
+2. Tunggu deployment terbaru berstatus Ready.
+3. Buka alamat .workers.dev Anda. Muat ulang penuh; jika tampilan lama masih tersimpan, tutup tab lalu buka alamat lagi.
+4. Masuk sebagai pemilik, buka dashboard, kemudian tab Akun pelanggan dan tekan Muat ulang daftar.
 
-Jika deployment gagal, lihat log deployment di Cloudflare. Jangan membuat database baru dan jangan menjalankan migration ulang untuk update ini.
+PERUBAHAN YANG TERLIHAT
+- Setelah pembayaran dikonfirmasi, pesanan keluar dari antrean utama Pesanan. Pesanan tetap bisa dibuka pada panel lipat “Pembayaran terkonfirmasi · lanjut proses” agar pemilik bisa mengatur persiapan, kurir, dan status pengiriman. Pesanan selesai/batal tetap di arsip.
+- Keuangan tetap menyimpan dan menampilkan semua pesanan lunas pada periode yang dipilih. Tombol Kecualikan mengeluarkan transaksi keliru dari omzet, grafik, laba-rugi, arus kas, proyeksi, dan CSV. Tombol Pulihkan memasukkannya kembali. Keduanya tidak menghapus data transaksi.
+- Tab Akun pelanggan hanya tersedia setelah pemilik masuk. Pemilik dapat melihat nomor/nama akun, tanggal daftar, jumlah pesanan, aktivitas terbaru, serta riwayat aktivitas seperti daftar, masuk, membuat pesanan, mengirim bukti, dan mengubah pesanan.
+- Hapus akun & blokir mencabut sesi akun dan melarang nomor itu membuat akun atau pesanan baru. Pesanan dan laporan keuangan lama tetap disimpan. Buka blokir mengizinkan nomor itu kembali menggunakan layanan; akunnya perlu mendaftar lagi.
+- Pemilik juga dapat memblokir nomor yang belum memiliki akun dengan mengisi nomor dan alasan pada tab Akun pelanggan.
+
+CATATAN
+- Fitur akun dan blokir berlaku untuk data di D1. PIN dan data rahasia akun tidak ditampilkan kepada pemilik.
+- Aktivitas mencatat kejadian akun/pesanan, bukan isi PIN. Aktivitas baru mulai tercatat setelah update ini; maksimal 5.000 aktivitas terbaru disimpan. Jangan bagikan akses akun pemilik.
+- Pelanggan guest tetap bisa bertransaksi. Riwayat guest dibatasi pada perangkat tempat pesanan dibuat.
+- Jika langkah SQL gagal, jangan lanjutkan publikasi Worker versi baru dulu; kirimkan teks error yang muncul untuk diperiksa.

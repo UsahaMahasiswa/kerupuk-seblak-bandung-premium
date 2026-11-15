@@ -41,6 +41,9 @@
       return {user:this.user,ownerData:null};
     },
     async loadOwnerState(){return await request('/api/owner/state');},
+    async loadOwnerAccounts(){return await request('/api/owner/accounts');},
+    async blockCustomerPhone(phone,reason){return await request('/api/owner/accounts/block',{method:'POST',body:JSON.stringify({phone,reason})});},
+    async unblockCustomerPhone(phone){return await request(`/api/owner/blocked-phones/${encodeURIComponent(phone)}`,{method:'DELETE'});},
     async saveOwnerState(state){return await request('/api/owner/state',{method:'PUT',body:JSON.stringify(state)});},
     async updateOwnerProfile(data){return await request('/api/owner/profile',{method:'PUT',body:JSON.stringify(data)});},
     async placeOrder(data){return await request('/api/orders',{method:'POST',body:JSON.stringify(data)});},

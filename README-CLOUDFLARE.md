@@ -4,15 +4,16 @@ The site is now configured as a Cloudflare Worker that serves the static website
 
 ## Update the existing live website
 
-This update changes the Worker and website files but does not change the D1 schema. Do not run the initial migration again.
+This update adds two D1 tables for customer activity and blocked phone numbers. Apply `migrations/0002_customer_admin_controls.sql` once to the existing D1 database before deploying the new Worker. Do not run the initial migration again.
 
-1. Download the update ZIP delivered with this revision and extract it.
-2. Open the local `kerupuk-seblak-bandung-premium` Git repository in File Explorer. Copy the extracted files into the repository root and choose **Replace files** when Windows asks.
-3. Keep your current `wrangler.jsonc` file. It contains your D1 database ID and is intentionally not included in the update ZIP.
-4. Open GitHub Desktop and select the `kerupuk-seblak-bandung-premium` repository. In **Changes**, review the changed files. Do not stage local secrets or private data.
-5. In the Summary box, type `Update mobile account, order history, and owner dashboard`, then select **Commit to main**.
-6. Select **Push origin**. Since the Cloudflare Worker is connected to this GitHub repository, Cloudflare should start a deployment from the connected branch automatically.
-7. In Cloudflare → **Workers & Pages** → `kerupuk-seblak-bandung-premium` → **Deployments**, wait for the latest deployment to show **Ready**. Open the existing `.workers.dev` address and refresh it. On a phone, refresh the page and open the ☰ menu to find **Pesanan saya** and **Akun saya / buat akun**.
+1. In Cloudflare → **Workers & Pages** → open the existing D1 database `kerupuk-seblak-db` → **Console**, execute the SQL in `migrations/0002_customer_admin_controls.sql` once. This creates activity and blocklist tables and preserves existing data.
+2. Download the update ZIP delivered with this revision and extract it.
+3. Open the local `kerupuk-seblak-bandung-premium` Git repository in File Explorer. Copy the extracted files into the repository root and choose **Replace files** when Windows asks.
+4. Keep your current `wrangler.jsonc` file. It contains your D1 database ID and is intentionally not included in the update ZIP. Do not run `migrations/0001_init.sql` again.
+5. Open GitHub Desktop and select the `kerupuk-seblak-bandung-premium` repository. In **Changes**, review the changed files. Do not stage local secrets or private data.
+6. In the Summary box, type `Rapikan dashboard dan kontrol akun pelanggan`, then select **Commit to main**.
+7. Select **Push origin**. Since the Cloudflare Worker is connected to this GitHub repository, Cloudflare should start a deployment from the connected branch automatically.
+8. In Cloudflare → **Workers & Pages** → `kerupuk-seblak-bandung-premium` → **Deployments**, wait for the latest deployment to show **Ready**. Open the existing `.workers.dev` address and refresh it. Owner dashboard tabs now include **Akun pelanggan**.
 
 If the deployment fails, open its build log first. Do not rerun the D1 migration or create a new database for this update. Existing customer accounts, owner account, orders, settings, and uploaded photos remain in the same D1 database.
 
@@ -22,7 +23,9 @@ If the deployment fails, open its build log first. Do not rerun the D1 migration
 - The “Pesanan saya” view replaces the public order lookup form. Signed-in customers see only orders linked to their account WhatsApp and can open that history from another device after signing in. Guest orders are listed only in the browser/device where they were placed; create or sign into a customer account with the same WhatsApp number to see matching orders on other devices.
 - Guest history uses a random per-order access key kept in that browser; an order number and WhatsApp number alone do not unlock the guest order API. The browser can clear its guest list without deleting the server-side order. Anyone with access to a shared, unlocked browser may still view its local guest history; use an account PIN on shared devices and clear guest history when finished.
 - Customers may edit recipient/address/note or cancel before preparation. Changing product contents requires canceling and making a new order. Confirmed paid or prepared orders need admin assistance.
-- Completed and canceled orders move into a collapsed owner archive. Canceled orders are excluded from revenue and canceled stock is returned. Completed paid orders remain in finance reports. The owner can still exclude an erroneous completed order from a report in the archive.
+- After payment confirmation, orders leave the main owner queue and move to a collapsed “Pembayaran terkonfirmasi · lanjut proses” section. The owner can still update preparation and delivery there. Completed and canceled orders stay in a collapsed archive.
+- The finance table shows every paid order in the selected period, including orders excluded from the report. **Kecualikan** removes a suspected fake or erroneous transaction from calculations, graphs, forecasts, and CSV; **Pulihkan** reverses that action. Neither action deletes the transaction.
+- The owner-only **Akun pelanggan** tab lists account phone/name, registration date, order count, and recent customer activity. **Hapus akun & blokir** removes the customer account and sessions, then blocks that phone from registering or ordering again. Existing orders, finance records, and activity history remain. The owner can unblock a phone later; that customer must register again.
 - Receipt and payment views offer WhatsApp links to Iqbal and Rehan with the order summary prefilled. The customer must tap **Kirim** inside WhatsApp; a browser cannot send a WhatsApp message silently.
 - The owner can upload a replacement photo for “Belajar mandiri, bertumbuh bersama” from Pengaturan. Images are resized in the browser before upload.
 
@@ -31,8 +34,8 @@ If the deployment fails, open its build log first. Do not rerun the D1 migration
 1. Create a D1 database named `kerupuk-seblak-db` in Cloudflare, if it does not already exist.
 2. In the D1 database page, copy its **Database ID**.
 3. Open `wrangler.jsonc` and replace `GANTI_DENGAN_DATABASE_ID_D1` with that ID. If the database has a different name, update `database_name` too.
-4. In the D1 Console, run all SQL in `migrations/0001_init.sql` once. Do not run it again if the tables already exist; this initial schema is intentionally create-only.
-5. Copy the website files and the new Worker files into the root of the GitHub repository. The root must contain `index.html`, `app-v2.js`, `cloud.js`, `worker.js`, `wrangler.jsonc`, `package.json`, and `migrations/0001_init.sql`.
+4. In the D1 Console, run all SQL in `migrations/0001_init.sql` once for a new database. For this updated version, also run `migrations/0002_customer_admin_controls.sql` once. On an existing live site, run only migration `0002`; do not rerun `0001`.
+5. Copy the website files and the new Worker files into the root of the GitHub repository. The root must contain `index.html`, `app-v2.js`, `cloud.js`, `worker.js`, `wrangler.jsonc`, `package.json`, `migrations/0001_init.sql`, and `migrations/0002_customer_admin_controls.sql`.
 6. Commit and push the changes to the `main` branch.
 7. In the Cloudflare Worker setup page, keep the project name `kerupuk-seblak-bandung-premium`, leave **Build command** blank, keep **Deploy command** as `npx wrangler deploy`, and use the default Preview command. Then deploy.
 8. If the D1 binding is not shown after deployment, open the Worker → **Settings** → **Bindings** and add a **D1 database** binding with variable name `DB`, selecting `kerupuk-seblak-db`.
@@ -51,7 +54,8 @@ Owner registration needs a one-time activation secret so a stranger cannot claim
 ## Notes
 
 - Existing browser-only demo data and the old browser owner account do not automatically move to D1. Create the real owner account again and enter current settings/stock in the owner dashboard.
-- Customer sign-in uses WhatsApp number and a six-digit PIN. Guest checkout remains available; guest customers use their order ID and WhatsApp number to look up the order.
+- Customer sign-in uses WhatsApp number and a six-digit PIN. Guest checkout remains available; guest order history is available only on the browser/device that placed the order unless the customer creates/signs into an account with the same number.
+- Customer activity logs include registration, sign-in, order creation/edit/cancel, and payment proof submission. They do not include the customer's PIN. Owner account/blocklist tools require the D1 migration above.
 - Proof images and site photos are compressed in the browser and stored in D1. D1 rows have a size limit; if an upload is rejected, use a smaller image.
 - Preview deployments use the same configured D1 database unless a separate preview binding/database is configured. Avoid entering real orders into previews.
 - Cloudflare Free has usage limits. D1 currently includes 5 million rows read/day, 100,000 rows written/day, 500 MB per database, and 5 GB total storage; Workers Free allows 100,000 requests/day and 10 ms CPU per request. If a free daily D1 limit is reached, database requests can fail until the limit resets. Check the usage dashboard and do not upgrade or enable paid add-ons if you need to keep the bill at zero.

@@ -24,6 +24,8 @@ Untuk menjalankan server lokal, buka terminal pada folder ini lalu jalankan `npx
 - Struk pesanan yang bisa dicetak/disimpan sebagai PDF, pembayaran manual QRIS, unggah bukti, dan cek status.
 - Akun pemilik tidak ditampilkan di beranda; buka alamat situs dengan akhiran `#pemilik` untuk mendaftar atau masuk. Dashboard mengelola pesanan/stok/harga, foto hero dan foto tiap kerupuk, serta laporan keuangan dengan grafik, laba-rugi, arus kas, CSV, dan cetak PDF.
 - Pemilik bisa mengecualikan satu pesanan keliru dari laporan keuangan dengan mencatat alasan, lalu memulihkannya kembali. Riwayat pesanan tetap tersimpan; transaksi yang dikecualikan tidak dihitung di omzet, arus kas, grafik, proyeksi, atau CSV.
+- Setelah pembayaran dikonfirmasi, pesanan pindah dari antrean utama ke panel lipat “Pembayaran terkonfirmasi · lanjut proses”, sehingga pemilik tetap dapat mengatur pengiriman tanpa memenuhi daftar kerja utama. Data pesanan tetap tersimpan di D1.
+- Tab Akun pelanggan hanya untuk pemilik: menampilkan daftar akun dan aktivitas terbatas pada daftar/masuk/pesanan/pembayaran. Pemilik dapat menghapus akun dan memblokir nomor atau membuka blokirnya. Sesi dicabut, sedangkan pesanan, laporan, dan jejak aktivitas yang sudah ada tetap dipertahankan.
 - Racikan dipisah menjadi enam `Signature` dengan resep tetap dan mode `Racik sendiri` untuk mencentang beberapa bumbu serta memilih sendok tiap bumbu. Seluruh takaran adalah patokan per 100 g dan menyesuaikan otomatis untuk pilihan 200 g atau 300 g. Rincian tampil di tas, struk, riwayat, dan dashboard.
 - Cerita pendiri dan visi-misi berdasarkan arahan pemilik.
 
@@ -40,7 +42,7 @@ Mode `Racik sendiri` menyediakan Bumbu Atom Bulan, kencur bubuk, cabai bubuk Aid
 
 ## Menyiapkan penyimpanan online
 
-Kode ini sudah memiliki Cloudflare Worker dan D1 API. Sebelum pesanan nyata diterima, ikuti [petunjuk pemasangan Cloudflare](README-CLOUDFLARE.md): isi ID database pada `wrangler.jsonc`, jalankan skema `migrations/0001_init.sql`, unggah kode ini ke GitHub, dan deploy Worker. Setelah deploy, buat rahasia satu kali `OWNER_SETUP_CODE`, daftar pemilik, lalu hapus rahasia itu. Jangan deploy salinan lama tanpa Worker.
+Kode ini sudah memiliki Cloudflare Worker dan D1 API. Sebelum pesanan nyata diterima, ikuti [petunjuk pemasangan Cloudflare](README-CLOUDFLARE.md): isi ID database pada `wrangler.jsonc`, jalankan skema `migrations/0001_init.sql` untuk database baru, unggah kode ini ke GitHub, dan deploy Worker. Jika memperbarui database lama, jalankan migration terbaru `0002_customer_admin_controls.sql` satu kali sebelum deploy. Setelah deploy pertama, buat rahasia satu kali `OWNER_SETUP_CODE`, daftar pemilik, lalu hapus rahasia itu. Jangan deploy salinan lama tanpa Worker.
 
 Di situs Cloudflare yang sudah terhubung, akun dan pesanan pelanggan, alamat, bukti bayar, stok, logo/foto, pengaturan, serta laporan keuangan disimpan di D1 sehingga tersedia di HP dan laptop. Data demo lama di browser tidak dipindah otomatis. QRIS dan nama penerima pembayaran harus diisi oleh pemilik. Masukkan harga serta HPP aktual di Pengaturan; formula sendok adalah patokan yang perlu dites pada batch produk. Cloudflare Free memiliki batas pemakaian; jika batas tercapai, operasi database dapat gagal sementara.
 

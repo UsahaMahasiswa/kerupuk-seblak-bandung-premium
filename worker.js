@@ -131,8 +131,20 @@ async function getOrders(env, phone=null) {
 async function getAccount(env, phone) {
   return await env.DB.prepare('SELECT phone,role,name,addresses_json,created_at FROM accounts WHERE phone=?').bind(phone).first();
 }
+async function isPhoneBlocked(env,phone) {
+  return Boolean(await env.DB.prepare('SELECT phone FROM blocked_phones WHERE phone=?').bind(phone).first());
+}
+async function logAccountActivity(env,phone,event,orderId='') {
+  if(!validPhone(phone)) return;
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO account_activity(id,phone,event,order_id,created_at) VALUES(?,?,?,?,?)')
+      .bind(randomHex(12),phone,String(event).slice(0,40),String(orderId||'').slice(0,100),nowIso()),
+    env.DB.prepare('DELETE FROM account_activity WHERE id IN (SELECT id FROM account_activity ORDER BY created_at DESC LIMIT -1 OFFSET 5000)')
+  ]);
+}
 async function createAccount(env,{phone,name,pin,role,address=''}) {
   if(!validPhone(phone)||!normalizePin(pin)||!String(name||'').trim()) return fail('Isi nama, nomor WhatsApp, dan PIN 6 digit dengan benar.');
+  if(role==='customer'&&await isPhoneBlocked(env,phone)) return fail('Nomor ini tidak dapat membuat akun. Hubungi admin usaha jika ini kekeliruan.',403);
   if(!hasPinPepper(env)) return fail('Rahasia PIN belum disetel. Tambahkan Secret PIN_PEPPER di Cloudflare.',503);
   if(role==='owner') {
     if(!APPROVED_OWNER_PHONES.has(phone)) return fail('Akun pemilik hanya bisa memakai nomor WhatsApp admin usaha.');
@@ -148,6 +160,7 @@ async function createAccount(env,{phone,name,pin,role,address=''}) {
     if(String(error).includes('UNIQUE')) return fail('Nomor ini sudah memiliki akun.',409);
     throw error;
   }
+  if(role==='customer') await logAccountActivity(env,phone,'account_registered');
   const session=await setSession(env,phone);
   return json({user:{phone,role,name:String(name).trim(),addresses}},201,{'set-cookie':session.header});
 }
@@ -174,9 +187,11 @@ async function login(request,env) {
   if(!validPhone(phone)||!normalizePin(pin)) return fail('Nomor WhatsApp atau PIN tidak cocok.',401);
   if(!hasPinPepper(env)) return fail('Rahasia PIN belum disetel. Tambahkan Secret PIN_PEPPER di Cloudflare.',503);
   if(!await rateLimit(env,request,phone)) return fail('Terlalu banyak percobaan. Coba lagi 15 menit lagi.',429);
+  if(await isPhoneBlocked(env,phone)) return fail('Nomor ini diblokir dari layanan. Hubungi admin usaha jika ini kekeliruan.',403);
   const account=await env.DB.prepare('SELECT phone,role,name,pin_salt,pin_hash,addresses_json FROM accounts WHERE phone=?').bind(phone).first();
   if(!account||!await verifyPin(pin,account.pin_salt,account.pin_hash,env)) { await failedLogin(env,request,phone); return fail('Nomor WhatsApp atau PIN tidak cocok.',401); }
   await clearFailedLogin(env,request,phone);
+  if(account.role==='customer') await logAccountActivity(env,phone,'login');
   const session=await setSession(env,phone), user={phone,role:account.role,name:account.name,addresses:JSON.parse(account.addresses_json||'[]')};
   return json({user},200,{'set-cookie':session.header});
 }
@@ -186,6 +201,7 @@ async function createOrder(request,env,session) {
   const owner=await env.DB.prepare("SELECT phone FROM accounts WHERE role='owner' LIMIT 1").first();
   if(!owner||!settings.qrisImage||!String(settings.payee||'').trim()) return fail('Toko belum siap menerima pesanan. Pemilik perlu membuat akun dan mengatur QRIS pembayaran terlebih dahulu.',503);
   const phone=session?.role==='customer'?session.phone:normalizePhone(body.phone);
+  if(await isPhoneBlocked(env,phone)) return fail('Nomor ini diblokir dari layanan. Hubungi admin usaha jika ini kekeliruan.',403);
   const name=String(body.name||session?.name||'').trim().slice(0,80),address=String(body.address||'').trim().slice(0,1000),note=String(body.note||'').trim().slice(0,500);
   if(!validPhone(phone)||!name||!address) return fail('Nama, nomor WhatsApp, dan alamat lengkap wajib diisi.');
   if(!Array.isArray(body.items)||!body.items.length||body.items.length>50) return fail('Isi tas pesanan tidak valid.');
@@ -229,6 +245,7 @@ async function createOrder(request,env,session) {
   const insert=env.DB.prepare('INSERT INTO orders(id,phone,delivery_date,status,created_at,data_json) SELECT ?,?,?,?,?,? WHERE changes()>0').bind(id,phone,order.deliveryDate,order.status,now,JSON.stringify(order));
   const results=await env.DB.batch([update,insert]);
   if(!results[0]?.meta?.changes) return fail('Stok baru saja berubah. Muat ulang halaman lalu coba lagi.',409);
+  await logAccountActivity(env,phone,'order_created',id);
   if(session?.role==='customer'&&body.saveAddress) {
     const account=await getAccount(env,phone),addresses=JSON.parse(account?.addresses_json||'[]');
     if(!addresses.includes(address)) addresses.unshift(address);
@@ -239,6 +256,37 @@ async function createOrder(request,env,session) {
 async function getOwnerState(env,session) {
   const state=await getState(env),orders=await getOrders(env),account=await getAccount(env,session.phone);
   return json({settings:state.settings,stock:state.stock,ledger:state.ledger,orders,owner:{phone:account.phone,name:account.name}});
+}
+async function getOwnerAccounts(env) {
+  const [accountRows,activityRows,blockedRows]=await Promise.all([
+    env.DB.prepare("SELECT a.phone,a.name,a.created_at,(SELECT COUNT(*) FROM orders o WHERE o.phone=a.phone) AS order_count,(SELECT x.created_at FROM account_activity x WHERE x.phone=a.phone ORDER BY x.created_at DESC LIMIT 1) AS last_activity FROM accounts a WHERE a.role='customer' ORDER BY a.created_at DESC LIMIT 300").all(),
+    env.DB.prepare('SELECT id,phone,event,order_id,created_at FROM account_activity ORDER BY created_at DESC LIMIT 300').all(),
+    env.DB.prepare('SELECT phone,reason,blocked_at,blocked_by FROM blocked_phones ORDER BY blocked_at DESC LIMIT 300').all()
+  ]);
+  return json({accounts:accountRows.results||[],activities:activityRows.results||[],blockedPhones:blockedRows.results||[]});
+}
+async function blockCustomerPhone(request,env,owner) {
+  const body=await parseJson(request),phone=normalizePhone(body.phone),reason=String(body.reason||'').trim().slice(0,240);
+  if(!validPhone(phone)||!reason) return fail('Masukkan nomor WhatsApp dan alasan pemblokiran.');
+  if(APPROVED_OWNER_PHONES.has(phone)) return fail('Nomor admin pemilik tidak dapat diblokir.');
+  const account=await env.DB.prepare('SELECT role FROM accounts WHERE phone=?').bind(phone).first();
+  if(account?.role==='owner') return fail('Akun pemilik tidak dapat dihapus atau diblokir.');
+  const timestamp=nowIso();
+  await env.DB.batch([
+    env.DB.prepare('INSERT INTO blocked_phones(phone,reason,blocked_at,blocked_by) VALUES(?,?,?,?) ON CONFLICT(phone) DO UPDATE SET reason=excluded.reason,blocked_at=excluded.blocked_at,blocked_by=excluded.blocked_by').bind(phone,reason,timestamp,owner.phone),
+    env.DB.prepare('INSERT INTO account_activity(id,phone,event,order_id,created_at) VALUES(?,?,?,?,?)').bind(randomHex(12),phone,'phone_blocked','',timestamp),
+    env.DB.prepare('DELETE FROM sessions WHERE phone=?').bind(phone),
+    env.DB.prepare("DELETE FROM accounts WHERE phone=? AND role='customer'").bind(phone),
+    env.DB.prepare('DELETE FROM account_activity WHERE id IN (SELECT id FROM account_activity ORDER BY created_at DESC LIMIT -1 OFFSET 5000)')
+  ]);
+  return json({ok:true,phone});
+}
+async function unblockCustomerPhone(env,phone) {
+  phone=normalizePhone(phone);
+  if(!validPhone(phone)) return fail('Nomor WhatsApp tidak valid.');
+  await env.DB.prepare('DELETE FROM blocked_phones WHERE phone=?').bind(phone).run();
+  await logAccountActivity(env,phone,'phone_unblocked');
+  return json({ok:true,phone});
 }
 async function saveOwnerState(request,env) {
   const body=await parseJson(request),old=await getState(env),settings={...old.settings,...(body.settings||{})},stock={...old.stock,...(body.stock||{})};
@@ -289,6 +337,7 @@ async function updateCustomerOrder(request,env,id,session){
     order.status='Dibatalkan';order.excludedFromFinance=true;order.financeExclusionReason='Dibatalkan oleh pelanggan';order.financeExcludedAt=nowIso();
     const update=env.DB.prepare("UPDATE orders SET status=?,data_json=? WHERE id=? AND status=?").bind(order.status,JSON.stringify(order),id,row.status),restore=stockRestorationStatement(env,order),results=await env.DB.batch(restore?[update,restore]:[update]);
     if(!results[0]?.meta?.changes)return fail('Status pesanan baru saja berubah. Muat ulang lalu coba lagi.',409);
+    await logAccountActivity(env,row.phone,'order_canceled',id);
     return json({order:safeOrder(order)});
   }
   if(body.action!=='edit')return fail('Aksi pesanan tidak valid.');
@@ -297,6 +346,7 @@ async function updateCustomerOrder(request,env,id,session){
   order.customerName=name;order.address=address;order.note=note;
   const update=await env.DB.prepare('UPDATE orders SET data_json=? WHERE id=? AND status=?').bind(JSON.stringify(order),id,row.status).run();
   if(!update.meta?.changes)return fail('Status pesanan baru saja berubah. Muat ulang lalu coba lagi.',409);
+  await logAccountActivity(env,row.phone,'order_updated',id);
   return json({order:safeOrder(order)});
 }
 async function updatePayment(request,env,id,session) {
@@ -314,6 +364,7 @@ async function updatePayment(request,env,id,session) {
   if(!order.proof) return fail('Pilih foto bukti pembayaran.');
   order.payerName=payerName;order.paymentStatus='Menunggu verifikasi';order.status='Menunggu verifikasi pembayaran';
   await env.DB.prepare('UPDATE orders SET status=?,data_json=? WHERE id=?').bind(order.status,JSON.stringify(order),id).run();
+  await logAccountActivity(env,row.phone,'payment_submitted',id);
   return json({order:safeOrder(order)});
 }
 async function ownerProfile(request,env,session) {
@@ -373,6 +424,19 @@ async function dispatch(request,env) {
   if(path==='/api/owner/profile'&&method==='PUT') {
     const session=await requireRole(request,env,'owner');if(!session) return fail('Sesi pemilik berakhir. Masuk lagi.',401);
     return await ownerProfile(request,env,session);
+  }
+  if(path==='/api/owner/accounts'&&method==='GET') {
+    if(!await requireRole(request,env,'owner')) return fail('Masuk sebagai pemilik untuk melihat akun pelanggan.',401);
+    return await getOwnerAccounts(env);
+  }
+  if(path==='/api/owner/accounts/block'&&method==='POST') {
+    const owner=await requireRole(request,env,'owner');if(!owner) return fail('Masuk sebagai pemilik untuk memblokir nomor.',401);
+    return await blockCustomerPhone(request,env,owner);
+  }
+  const blockedPhone=path.match(/^\/api\/owner\/blocked-phones\/([^/]+)$/);
+  if(blockedPhone&&method==='DELETE') {
+    if(!await requireRole(request,env,'owner')) return fail('Masuk sebagai pemilik untuk membuka blokir.',401);
+    return await unblockCustomerPhone(env,decodeURIComponent(blockedPhone[1]));
   }
   const ownerOrder=path.match(/^\/api\/owner\/orders\/([^/]+)$/);
   if(ownerOrder&&method==='PATCH') {

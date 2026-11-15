@@ -192,3 +192,22 @@ body{font-family:'DM Sans',Arial,sans-serif;font-size:17px;line-height:1.65;colo
 }
 .finance-exclusion-note{display:grid;gap:4px;margin:10px 0;padding:10px 12px;border-left:3px solid var(--gold);background:#fbf2df;color:#5d463a;font-size:14px;line-height:1.5}
 .finance-exclusion-note strong{color:var(--wine)}
+.order-paid-queue{border-color:#d9c49f;background:#fffdf8}
+.order-paid-queue>summary{color:#654735}
+.finance-excluded-row{background:#fbf3e9}
+.finance-excluded-row td{color:#8b796b}
+.finance-table td small{font-size:11px;color:#9a5b3e}
+.small-button.danger{border-color:#b75b50;background:#fff8f5;color:#8f2d2b}
+.account-admin-toolbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin:3px 0 12px}
+.account-admin-toolbar h3,.account-admin-card h4{margin:0 0 7px;color:var(--wine);font:20px Georgia,serif}
+.account-admin-card{margin-top:11px}
+.account-admin-card .field-hint,.account-admin-toolbar .field-hint{margin:0 0 10px;font-size:13px;line-height:1.55}
+.account-admin-card .ledger-form{grid-template-columns:1fr 1.5fr auto}
+@media(max-width:760px){
+  .account-admin-toolbar{align-items:stretch;flex-direction:column}
+  .account-admin-card .ledger-form{grid-template-columns:1fr}
+  .account-admin-card .ledger-form .small-button{width:100%}
+  .account-admin-card{padding:11px}
+  .account-admin-card .finance-table{min-width:690px}
+  .finance-table td .small-button{white-space:nowrap}
+}
