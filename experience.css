@@ -150,6 +150,29 @@ body{font-family:'DM Sans',Arial,sans-serif;font-size:17px;line-height:1.65;colo
   .header-actions .account-button{display:none}
 }
 
+/* Mobile menu actions stay visible even on narrow Android screens. */
+.main-nav .mobile-nav-action{display:none}
+.order-archive{margin-top:18px;border:1px solid var(--line);background:#fffaf2}
+.order-archive>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 16px;color:var(--wine);font-size:15px;font-weight:800;cursor:pointer;list-style:none}
+.order-archive>summary::-webkit-details-marker{display:none}
+.order-archive>summary b{display:grid;place-items:center;min-width:25px;height:25px;padding:0 7px;border-radius:50%;background:#f0e2cb;color:var(--wine);font-size:12px}
+.order-archive>div{display:grid;gap:10px;padding:0 12px 12px}
+.wa-order-links{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:14px 0;padding:13px;border:1px solid #ddcbb3;background:#fff8ed;color:#5f4c40}
+.wa-order-links strong{flex-basis:100%;color:var(--wine);font-size:14px}
+.wa-order-links p{flex-basis:100%;margin:0;font-size:13px;line-height:1.5}
+.wa-order-links a{display:inline-flex;align-items:center;justify-content:center;min-height:39px;padding:7px 13px;background:#167c54;color:#fff;border-radius:4px;text-decoration:none;font-size:13px;font-weight:800}
+.wa-order-links a:hover{background:#126344}
+@media(max-width:760px){
+  .main-nav.open{gap:0;padding:8px 17px 16px;box-shadow:0 14px 24px rgba(51,25,21,.11)}
+  .main-nav.open a,.main-nav.open .mobile-nav-action{min-height:47px;display:flex;align-items:center;padding:10px 6px;border:0;border-bottom:1px solid var(--line);background:transparent;color:#5e4a40;font-size:16px;font-weight:750;text-align:left;text-decoration:none}
+  .main-nav.open .mobile-nav-action{width:100%;cursor:pointer}
+  .main-nav.open .mobile-nav-action:last-child{border-bottom:0;color:var(--wine)}
+  .wa-order-links{align-items:stretch}
+  .wa-order-links a{flex:1}
+  .order-archive>summary{font-size:14px}
+}
+@media(max-width:390px){.main-nav.open .mobile-nav-action{font-size:15px}}
+
 /* Racikan kini menampilkan formula Signature dan daftar bumbu mandiri yang lebih lengkap. */
 .signature-option{align-items:flex-start;min-height:90px;padding:11px}
 .signature-option .flavor-dot{margin-top:2px}

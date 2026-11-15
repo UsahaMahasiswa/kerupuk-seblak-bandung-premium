@@ -1,0 +1,24 @@
+CARA UPDATE WEBSITE KERUPUK SEBLAK BANDUNG PREMIUM
+
+Paket ini hanya berisi file website/Worker yang berubah. File wrangler.jsonc sengaja tidak disertakan agar ID database D1 Anda tidak tertimpa.
+
+1. Unduh dan ekstrak kerupuk-seblak-update-2026-11-15.zip.
+2. Buka folder lokal repo GitHub: kerupuk-seblak-bandung-premium.
+3. Salin semua file hasil ekstrak langsung ke folder utama repo tersebut. Pilih Replace/Ganti untuk file yang namanya sama.
+4. Jangan menghapus atau mengganti wrangler.jsonc. Jangan menjalankan migration SQL lagi.
+5. Buka GitHub Desktop dan pilih repo kerupuk-seblak-bandung-premium.
+6. Periksa tab Changes. Pastikan file yang berubah adalah app-v2.js, cloud.js, worker.js, index.html, experience.css, README-CLOUDFLARE.md, dan CARA-UPDATE.txt.
+7. Di Summary, tulis: Perbaiki menu Android dan riwayat pesanan.
+8. Klik Commit to main, lalu klik Push origin.
+9. Buka Cloudflare Dashboard > Workers & Pages > kerupuk-seblak-bandung-premium > Deployments.
+10. Tunggu deployment baru berstatus Ready. Jika Cloudflare terhubung ke repo/branch main, proses ini berjalan setelah Push origin.
+11. Buka https://kerupuk-seblak-bandung-premium.nur-iqbal.workers.dev/ dan refresh. Di Android, buka tombol ☰ untuk melihat Akun saya / buat akun dan Cek pesanan.
+
+PERILAKU BARU
+- Pelanggan yang login melihat riwayat pesanan dan alamat dari perangkat lain. Tamu mengecek pesanan dengan nomor struk dan WhatsApp yang digunakan saat memesan.
+- Sebelum pesanan disiapkan dan pembayaran dikonfirmasi, pelanggan dapat mengubah nama penerima/alamat/catatan atau membatalkan. Isi produk/racikan diubah dengan membatalkan pesanan lalu membuat pesanan baru.
+- Pesanan selesai dan batal ada dalam arsip ringkas di dashboard pemilik. Pesanan selesai tetap masuk laporan bila pembayarannya terkonfirmasi. Pesanan batal tidak masuk laporan pemasukan dan stok dikembalikan.
+- Dari struk/pembayaran tersedia tombol WhatsApp Iqbal dan Rehan dengan ringkasan order terisi. Pelanggan tetap perlu menekan tombol Kirim di aplikasi WhatsApp.
+- Foto bagian “Belajar mandiri, bertumbuh bersama” dapat diganti dari Dashboard Pemilik > Pengaturan > Foto cerita usaha.
+
+Jika deployment gagal, lihat log deployment di Cloudflare. Jangan membuat database baru dan jangan menjalankan migration ulang untuk update ini.

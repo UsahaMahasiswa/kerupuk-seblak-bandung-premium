@@ -49,6 +49,7 @@
       const query=phone?`?phone=${encodeURIComponent(phone)}`:'';
       return await request(`/api/orders/${encodeURIComponent(id)}${query}`);
     },
+    async updateCustomerOrder(id,data){return await request(`/api/orders/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(data)});},
     async updateOrder(id,data){return await request(`/api/owner/orders/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(data)});},
     async addLedger(entry){return await request('/api/owner/ledger',{method:'POST',body:JSON.stringify({entry})});},
     async deleteLedger(id){return await request(`/api/owner/ledger/${encodeURIComponent(id)}`,{method:'DELETE'});},

@@ -2,6 +2,29 @@
 
 The site is now configured as a Cloudflare Worker that serves the static website and a same-origin JSON API. Customer accounts, owner account, orders, uploaded payment proof, inventory, settings, and finance entries use D1. The cart and current builder selection remain in the visitor's browser until checkout.
 
+## Update the existing live website
+
+This update changes the Worker and website files but does not change the D1 schema. Do not run the initial migration again.
+
+1. Download the update ZIP delivered with this revision and extract it.
+2. Open the local `kerupuk-seblak-bandung-premium` Git repository in File Explorer. Copy the extracted files into the repository root and choose **Replace files** when Windows asks.
+3. Keep your current `wrangler.jsonc` file. It contains your D1 database ID and is intentionally not included in the update ZIP.
+4. Open GitHub Desktop and select the `kerupuk-seblak-bandung-premium` repository. In **Changes**, review the changed files. Do not stage local secrets or private data.
+5. In the Summary box, type `Update mobile account, order history, and owner dashboard`, then select **Commit to main**.
+6. Select **Push origin**. Since the Cloudflare Worker is connected to this GitHub repository, Cloudflare should start a deployment from the connected branch automatically.
+7. In Cloudflare → **Workers & Pages** → `kerupuk-seblak-bandung-premium` → **Deployments**, wait for the latest deployment to show **Ready**. Open the existing `.workers.dev` address and refresh it. On a phone, refresh the page and open the ☰ menu to find **Akun saya / buat akun** and **Cek pesanan**.
+
+If the deployment fails, open its build log first. Do not rerun the D1 migration or create a new database for this update. Existing customer accounts, owner account, orders, settings, and uploaded photos remain in the same D1 database.
+
+### What changes in this revision
+
+- The mobile menu includes customer sign-in/registration and order lookup.
+- Signed-in customers can see online order history on another device. A guest can recover a receipt with the order number and WhatsApp used at checkout.
+- Customers may edit recipient/address/note or cancel before preparation. Changing product contents requires canceling and making a new order. Confirmed paid or prepared orders need admin assistance.
+- Completed and canceled orders move into a collapsed owner archive. Canceled orders are excluded from revenue and canceled stock is returned. Completed paid orders remain in finance reports. The owner can still exclude an erroneous completed order from a report in the archive.
+- Receipt and payment views offer WhatsApp links to Iqbal and Rehan with the order summary prefilled. The customer must tap **Kirim** inside WhatsApp; a browser cannot send a WhatsApp message silently.
+- The owner can upload a replacement photo for “Belajar mandiri, bertumbuh bersama” from Pengaturan. Images are resized in the browser before upload.
+
 ## Before publishing
 
 1. Create a D1 database named `kerupuk-seblak-db` in Cloudflare, if it does not already exist.

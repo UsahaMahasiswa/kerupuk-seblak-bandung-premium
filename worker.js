@@ -12,7 +12,7 @@ const INGREDIENT_IDS = new Set(['atom','kencur','aida','rawit','bawang-goreng','
 const SIGNATURE_IDS = new Set(['original','pedas','jeruk','bbq','jagung','balado']);
 const DEFAULT_SETTINGS = {
   pricePer100g:11900,hppPer100g:0,pouchCost:0,shippingFee:SHIPPING_FEE,freeShippingSubtotal:FREE_SHIPPING,
-  maxPackagesDay:30,initialCash:0,payee:'Trio Seblak',whatsapp:'',qrisImage:'',heroImage:'',brandLogo:'',
+  maxPackagesDay:30,initialCash:0,payee:'Trio Seblak',whatsapp:'',qrisImage:'',heroImage:'',brandLogo:'',storyImage:'',
   flavorImages:{},ingredientImages:{},productImages:{},
   paymentNote:'Scan QRIS dan unggah bukti pembayaran. Pesanan menunggu verifikasi pemilik.'
 };
@@ -110,7 +110,7 @@ function mediaKeyFor(group,id) { return `${group}/${id}`; }
 function isDataImage(value) { return typeof value==='string' && /^data:image\/(png|jpeg|webp|gif);base64,/i.test(value); }
 async function saveSettingsAndMedia(env, settings) {
   const next = structuredClone(settings||{}), changed = [];
-  const fields = [['qrisImage','payment'],['heroImage','hero'],['brandLogo','brand']];
+  const fields = [['qrisImage','payment'],['heroImage','hero'],['brandLogo','brand'],['storyImage','story']];
   for(const [field,key] of fields) if(isDataImage(next[field])) { changed.push([key,next[field]]); next[field]=`/api/media/${key}`; }
   for(const [field,group] of [['productImages','product'],['flavorImages','signature'],['ingredientImages','ingredient']]) {
     next[field]=next[field]||{};
@@ -125,7 +125,9 @@ async function saveSettingsAndMedia(env, settings) {
 async function getOrders(env, phone=null) {
   const query = phone ? env.DB.prepare('SELECT data_json FROM orders WHERE phone=? ORDER BY created_at DESC').bind(phone) : env.DB.prepare('SELECT data_json FROM orders ORDER BY created_at DESC');
   const rows = await query.all();
-  return (rows.results||[]).map(row=>JSON.parse(row.data_json));
+  return (rows.results||[]).map(row=>{
+    const order=JSON.parse(row.data_json);order.proofAvailable=Boolean(order.proof);delete order.proof;return order;
+  });
 }
 async function getAccount(env, phone) {
   return await env.DB.prepare('SELECT phone,role,name,addresses_json,created_at FROM accounts WHERE phone=?').bind(phone).first();
@@ -250,14 +252,51 @@ async function saveOwnerState(request,env) {
   return json({settings:media.settings,stock,ledger});
 }
 async function updateOwnerOrder(request,env,id) {
-  const orderRow=await env.DB.prepare('SELECT data_json FROM orders WHERE id=?').bind(id).first();
+  const orderRow=await env.DB.prepare('SELECT status,data_json FROM orders WHERE id=?').bind(id).first();
   if(!orderRow) return fail('Pesanan tidak ditemukan.',404);
   const body=await parseJson(request),order=JSON.parse(orderRow.data_json),allowed=['status','paymentStatus','paidAt','deliveredAt','courierActualCost','ownerNote','excludedFromFinance','financeExclusionReason','financeExcludedAt'];
   const statuses=new Set(['Menunggu pembayaran','Menunggu verifikasi pembayaran','Pembayaran diverifikasi','Disiapkan','Dalam pengiriman','Selesai','Dibatalkan']);
   if(body.status!==undefined&&!statuses.has(body.status)) return fail('Status pesanan tidak valid.');
+  const wasCanceled=order.status==='Dibatalkan';
   for(const key of allowed) if(body[key]!==undefined) order[key]=body[key];
   if(order.status==='Selesai'&&!order.deliveredAt) order.deliveredAt=nowIso();
-  await env.DB.prepare('UPDATE orders SET status=?,data_json=? WHERE id=?').bind(order.status,JSON.stringify(order),id).run();
+  if(order.status==='Dibatalkan'){
+    order.excludedFromFinance=true;order.financeExclusionReason=order.financeExclusionReason||'Pesanan dibatalkan';order.financeExcludedAt=order.financeExcludedAt||nowIso();
+  }
+  const cancelTransition=order.status==='Dibatalkan'&&!wasCanceled;
+  const update=cancelTransition
+    ?env.DB.prepare('UPDATE orders SET status=?,data_json=? WHERE id=? AND status<>?').bind(order.status,JSON.stringify(order),id,'Dibatalkan')
+    :env.DB.prepare('UPDATE orders SET status=?,data_json=? WHERE id=?').bind(order.status,JSON.stringify(order),id);
+  const statements=[update];if(cancelTransition){const restore=stockRestorationStatement(env,order);if(restore)statements.push(restore);}
+  const results=await env.DB.batch(statements);
+  if(cancelTransition&&!results[0]?.meta?.changes)return fail('Status pesanan baru saja berubah. Muat ulang lalu coba lagi.',409);
+  return json({order});
+}
+function stockRestorationStatement(env,order){
+  const used={};for(const item of order.items||[])for(const part of item.mix||[])if(PRODUCT_NAMES[part.id])used[part.id]=(used[part.id]||0)+Number(part.grams||0)*Number(item.qty||0);
+  const pairs=Object.entries(used).filter(([,grams])=>Number.isFinite(grams)&&grams>0);if(!pairs.length)return null;
+  const paths=pairs.map(([id])=>`'$.${id}', COALESCE(json_extract(stock_json,'$.${id}'),0)+?`).join(',');
+  return env.DB.prepare(`UPDATE site_state SET stock_json=json_set(stock_json,${paths}),updated_at=? WHERE id=1 AND changes()>0`).bind(...pairs.map(([,grams])=>Math.round(grams)),nowIso());
+}
+async function updateCustomerOrder(request,env,id,session){
+  const row=await env.DB.prepare('SELECT phone,status,data_json FROM orders WHERE id=?').bind(id).first();if(!row)return fail('Pesanan tidak ditemukan.',404);
+  const body=await parseJson(request),phone=normalizePhone(body.phone||session?.phone);
+  if(session?.role!=='owner'&&phone!==row.phone)return fail('Nomor WhatsApp tidak cocok dengan pesanan ini.',403);
+  if(session?.role==='owner')return fail('Gunakan dashboard pemilik untuk mengubah pesanan.',403);
+  const order=JSON.parse(row.data_json),editable=['Menunggu pembayaran','Menunggu verifikasi pembayaran','Pembayaran diverifikasi'];
+  if(!editable.includes(order.status)||order.paymentStatus==='Lunas terkonfirmasi')return fail('Pesanan sudah diproses atau dibayar terkonfirmasi. Hubungi admin untuk perubahan.',409);
+  if(body.action==='cancel'){
+    order.status='Dibatalkan';order.excludedFromFinance=true;order.financeExclusionReason='Dibatalkan oleh pelanggan';order.financeExcludedAt=nowIso();
+    const update=env.DB.prepare("UPDATE orders SET status=?,data_json=? WHERE id=? AND status=?").bind(order.status,JSON.stringify(order),id,row.status),restore=stockRestorationStatement(env,order),results=await env.DB.batch(restore?[update,restore]:[update]);
+    if(!results[0]?.meta?.changes)return fail('Status pesanan baru saja berubah. Muat ulang lalu coba lagi.',409);
+    return json({order});
+  }
+  if(body.action!=='edit')return fail('Aksi pesanan tidak valid.');
+  const name=String(body.name||'').trim().slice(0,80),address=String(body.address||'').trim().slice(0,1000),note=String(body.note||'').trim().slice(0,500);
+  if(!name||!address)return fail('Nama penerima dan alamat lengkap wajib diisi.');
+  order.customerName=name;order.address=address;order.note=note;
+  const update=await env.DB.prepare('UPDATE orders SET data_json=? WHERE id=? AND status=?').bind(JSON.stringify(order),id,row.status).run();
+  if(!update.meta?.changes)return fail('Status pesanan baru saja berubah. Muat ulang lalu coba lagi.',409);
   return json({order});
 }
 async function updatePayment(request,env,id,session) {
@@ -361,6 +400,7 @@ async function dispatch(request,env) {
   const payment=path.match(/^\/api\/orders\/([^/]+)\/payment$/);
   if(payment&&method==='POST') return await updatePayment(request,env,decodeURIComponent(payment[1]),await readSession(request,env));
   const orderPath=path.match(/^\/api\/orders\/([^/]+)$/);
+  if(orderPath&&method==='PATCH') return await updateCustomerOrder(request,env,decodeURIComponent(orderPath[1]),await readSession(request,env));
   if(orderPath&&method==='GET') {
     const id=decodeURIComponent(orderPath[1]),row=await env.DB.prepare('SELECT phone,data_json FROM orders WHERE id=?').bind(id).first();
     if(!row) return fail('Nomor pesanan tidak ditemukan.',404);
