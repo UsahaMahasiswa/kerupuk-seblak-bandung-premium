@@ -12,10 +12,11 @@ Paket ini hanya berisi file website/Worker yang berubah. File wrangler.jsonc sen
 8. Klik Commit to main, lalu klik Push origin.
 9. Buka Cloudflare Dashboard > Workers & Pages > kerupuk-seblak-bandung-premium > Deployments.
 10. Tunggu deployment baru berstatus Ready. Jika Cloudflare terhubung ke repo/branch main, proses ini berjalan setelah Push origin.
-11. Buka https://kerupuk-seblak-bandung-premium.nur-iqbal.workers.dev/ dan refresh. Di Android, buka tombol ☰ untuk melihat Akun saya / buat akun dan Cek pesanan.
+11. Buka https://kerupuk-seblak-bandung-premium.nur-iqbal.workers.dev/ dan refresh. Di Android, buka tombol ☰ untuk melihat Pesanan saya dan Akun saya / buat akun.
 
 PERILAKU BARU
-- Pelanggan yang login melihat riwayat pesanan dan alamat dari perangkat lain. Tamu mengecek pesanan dengan nomor struk dan WhatsApp yang digunakan saat memesan.
+- Tombol “Cek pesanan” diganti “Pesanan saya”. Pelanggan yang login melihat pesanan milik nomor WhatsApp akunnya dari perangkat lain setelah masuk. Riwayat tamu hanya tersimpan di browser/perangkat tempat mereka memesan.
+- Buat/masuk akun pelanggan dengan WhatsApp yang sama untuk melihat pesanan tamu lama di perangkat lain. Di perangkat bersama, gunakan akun PIN atau hapus riwayat tamu dari menu “Pesanan saya”; penghapusan ini hanya menghapus daftar lokal, bukan data admin.
 - Sebelum pesanan disiapkan dan pembayaran dikonfirmasi, pelanggan dapat mengubah nama penerima/alamat/catatan atau membatalkan. Isi produk/racikan diubah dengan membatalkan pesanan lalu membuat pesanan baru.
 - Pesanan selesai dan batal ada dalam arsip ringkas di dashboard pemilik. Pesanan selesai tetap masuk laporan bila pembayarannya terkonfirmasi. Pesanan batal tidak masuk laporan pemasukan dan stok dikembalikan.
 - Dari struk/pembayaran tersedia tombol WhatsApp Iqbal dan Rehan dengan ringkasan order terisi. Pelanggan tetap perlu menekan tombol Kirim di aplikasi WhatsApp.

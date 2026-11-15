@@ -108,6 +108,7 @@ function publicSettings(settings) {
 }
 function mediaKeyFor(group,id) { return `${group}/${id}`; }
 function isDataImage(value) { return typeof value==='string' && /^data:image\/(png|jpeg|webp|gif);base64,/i.test(value); }
+function safeOrder(order,summary=false){const copy={...order};delete copy.guestAccessKey;if(summary){copy.proofAvailable=Boolean(copy.proof);delete copy.proof;}return copy;}
 async function saveSettingsAndMedia(env, settings) {
   const next = structuredClone(settings||{}), changed = [];
   const fields = [['qrisImage','payment'],['heroImage','hero'],['brandLogo','brand'],['storyImage','story']];
@@ -125,9 +126,7 @@ async function saveSettingsAndMedia(env, settings) {
 async function getOrders(env, phone=null) {
   const query = phone ? env.DB.prepare('SELECT data_json FROM orders WHERE phone=? ORDER BY created_at DESC').bind(phone) : env.DB.prepare('SELECT data_json FROM orders ORDER BY created_at DESC');
   const rows = await query.all();
-  return (rows.results||[]).map(row=>{
-    const order=JSON.parse(row.data_json);order.proofAvailable=Boolean(order.proof);delete order.proof;return order;
-  });
+  return (rows.results||[]).map(row=>safeOrder(JSON.parse(row.data_json),true));
 }
 async function getAccount(env, phone) {
   return await env.DB.prepare('SELECT phone,role,name,addresses_json,created_at FROM accounts WHERE phone=?').bind(phone).first();
@@ -224,7 +223,7 @@ async function createOrder(request,env,session) {
   const tomorrowCount=(tomorrowRows.results||[]).reduce((sum,row)=>sum+(JSON.parse(row.data_json).packages||0),0);
   if(tomorrowCount+packages>capacity) tomorrow.setDate(tomorrow.getDate()+1);
   const now=nowIso(),id=`KSB-${dateIso(new Date()).replace(/-/g,'')}-${randomHex(5).toUpperCase()}`;
-  const order={id,createdAt:now,paidAt:null,customerName:name,customerPhone:phone,address,note,items,packages,subtotal,shipping,total,deliveryDate:dateIso(tomorrow),status:'Menunggu pembayaran',paymentStatus:'Belum dibayar',payerName:'',proof:'',courierActualCost:null,ownerNote:''};
+  const order={id,createdAt:now,paidAt:null,customerName:name,customerPhone:phone,address,note,items,packages,subtotal,shipping,total,deliveryDate:dateIso(tomorrow),status:'Menunggu pembayaran',paymentStatus:'Belum dibayar',payerName:'',proof:'',guestAccessKey:session?.role==='customer'?'':randomHex(32),courierActualCost:null,ownerNote:''};
   for(const [productId,grams] of Object.entries(used)) stock[productId]=Math.max(0,(Number(stock[productId])||0)-grams);
   const update=env.DB.prepare('UPDATE site_state SET stock_json=?,updated_at=? WHERE id=1 AND stock_json=?').bind(JSON.stringify(stock),now,(await getState(env)).rawStockJson);
   const insert=env.DB.prepare('INSERT INTO orders(id,phone,delivery_date,status,created_at,data_json) SELECT ?,?,?,?,?,? WHERE changes()>0').bind(id,phone,order.deliveryDate,order.status,now,JSON.stringify(order));
@@ -280,16 +279,17 @@ function stockRestorationStatement(env,order){
 }
 async function updateCustomerOrder(request,env,id,session){
   const row=await env.DB.prepare('SELECT phone,status,data_json FROM orders WHERE id=?').bind(id).first();if(!row)return fail('Pesanan tidak ditemukan.',404);
-  const body=await parseJson(request),phone=normalizePhone(body.phone||session?.phone);
-  if(session?.role!=='owner'&&phone!==row.phone)return fail('Nomor WhatsApp tidak cocok dengan pesanan ini.',403);
+  const body=await parseJson(request),order=JSON.parse(row.data_json);
   if(session?.role==='owner')return fail('Gunakan dashboard pemilik untuk mengubah pesanan.',403);
-  const order=JSON.parse(row.data_json),editable=['Menunggu pembayaran','Menunggu verifikasi pembayaran','Pembayaran diverifikasi'];
+  if(session?.role==='customer'){if(session.phone!==row.phone)return fail('Akun ini tidak memiliki pesanan tersebut.',403);}
+  else if(!order.guestAccessKey||body.guestAccessKey!==order.guestAccessKey)return fail('Akses riwayat tamu tidak cocok dengan perangkat ini.',403);
+  const editable=['Menunggu pembayaran','Menunggu verifikasi pembayaran','Pembayaran diverifikasi'];
   if(!editable.includes(order.status)||order.paymentStatus==='Lunas terkonfirmasi')return fail('Pesanan sudah diproses atau dibayar terkonfirmasi. Hubungi admin untuk perubahan.',409);
   if(body.action==='cancel'){
     order.status='Dibatalkan';order.excludedFromFinance=true;order.financeExclusionReason='Dibatalkan oleh pelanggan';order.financeExcludedAt=nowIso();
     const update=env.DB.prepare("UPDATE orders SET status=?,data_json=? WHERE id=? AND status=?").bind(order.status,JSON.stringify(order),id,row.status),restore=stockRestorationStatement(env,order),results=await env.DB.batch(restore?[update,restore]:[update]);
     if(!results[0]?.meta?.changes)return fail('Status pesanan baru saja berubah. Muat ulang lalu coba lagi.',409);
-    return json({order});
+    return json({order:safeOrder(order)});
   }
   if(body.action!=='edit')return fail('Aksi pesanan tidak valid.');
   const name=String(body.name||'').trim().slice(0,80),address=String(body.address||'').trim().slice(0,1000),note=String(body.note||'').trim().slice(0,500);
@@ -297,14 +297,15 @@ async function updateCustomerOrder(request,env,id,session){
   order.customerName=name;order.address=address;order.note=note;
   const update=await env.DB.prepare('UPDATE orders SET data_json=? WHERE id=? AND status=?').bind(JSON.stringify(order),id,row.status).run();
   if(!update.meta?.changes)return fail('Status pesanan baru saja berubah. Muat ulang lalu coba lagi.',409);
-  return json({order});
+  return json({order:safeOrder(order)});
 }
 async function updatePayment(request,env,id,session) {
   const row=await env.DB.prepare('SELECT phone,data_json FROM orders WHERE id=?').bind(id).first();
   if(!row) return fail('Pesanan tidak ditemukan.',404);
-  const body=await parseJson(request),provided=normalizePhone(body.phone||session?.phone);
-  if(session?.role!=='owner'&&provided!==row.phone) return fail('Nomor WhatsApp tidak cocok dengan pesanan ini.',403);
-  const order=JSON.parse(row.data_json),payerName=String(body.payerName||'').trim().slice(0,80);
+  const body=await parseJson(request),order=JSON.parse(row.data_json);
+  if(session?.role==='customer'){if(session.phone!==row.phone)return fail('Akun ini tidak memiliki pesanan tersebut.',403);}
+  else if(session?.role!=='owner'&&(!order.guestAccessKey||body.guestAccessKey!==order.guestAccessKey))return fail('Akses riwayat tamu tidak cocok dengan perangkat ini.',403);
+  const payerName=String(body.payerName||'').trim().slice(0,80);
   if(!payerName) return fail('Isi nama pada pembayaran.');
   if(body.proof!==undefined) {
     if(!validImageData(body.proof)) return fail('Foto bukti tidak valid atau terlalu besar.');
@@ -313,7 +314,7 @@ async function updatePayment(request,env,id,session) {
   if(!order.proof) return fail('Pilih foto bukti pembayaran.');
   order.payerName=payerName;order.paymentStatus='Menunggu verifikasi';order.status='Menunggu verifikasi pembayaran';
   await env.DB.prepare('UPDATE orders SET status=?,data_json=? WHERE id=?').bind(order.status,JSON.stringify(order),id).run();
-  return json({order});
+  return json({order:safeOrder(order)});
 }
 async function ownerProfile(request,env,session) {
   const body=await parseJson(request),phone=normalizePhone(body.phone),name=String(body.name||'').trim().slice(0,80),pin=String(body.pin||'');
@@ -404,9 +405,10 @@ async function dispatch(request,env) {
   if(orderPath&&method==='GET') {
     const id=decodeURIComponent(orderPath[1]),row=await env.DB.prepare('SELECT phone,data_json FROM orders WHERE id=?').bind(id).first();
     if(!row) return fail('Nomor pesanan tidak ditemukan.',404);
-    const session=await readSession(request,env),phone=normalizePhone(url.searchParams.get('phone')||session?.phone);
-    if(session?.role!=='owner'&&phone!==row.phone) return fail('Masukkan nomor WhatsApp pemesan untuk melihat struk.',403);
-    return json({order:JSON.parse(row.data_json)});
+    const session=await readSession(request,env),order=JSON.parse(row.data_json),accessKey=request.headers.get('x-ksb-order-key')||'';
+    if(session?.role==='customer'){if(session.phone!==row.phone)return fail('Akun ini tidak memiliki pesanan tersebut.',403);}
+    else if(session?.role!=='owner'&&(!order.guestAccessKey||accessKey!==order.guestAccessKey))return fail('Riwayat pesanan tamu hanya tersedia di perangkat tempat pemesanan dibuat.',403);
+    return json({order:safeOrder(order,url.searchParams.get('summary')==='1')});
   }
   const media=path.match(/^\/api\/media\/([a-z0-9_-]+(?:\/[a-z0-9_-]+)?)$/i);
   if(media&&method==='GET') {

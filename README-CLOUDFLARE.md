@@ -12,14 +12,15 @@ This update changes the Worker and website files but does not change the D1 sche
 4. Open GitHub Desktop and select the `kerupuk-seblak-bandung-premium` repository. In **Changes**, review the changed files. Do not stage local secrets or private data.
 5. In the Summary box, type `Update mobile account, order history, and owner dashboard`, then select **Commit to main**.
 6. Select **Push origin**. Since the Cloudflare Worker is connected to this GitHub repository, Cloudflare should start a deployment from the connected branch automatically.
-7. In Cloudflare → **Workers & Pages** → `kerupuk-seblak-bandung-premium` → **Deployments**, wait for the latest deployment to show **Ready**. Open the existing `.workers.dev` address and refresh it. On a phone, refresh the page and open the ☰ menu to find **Akun saya / buat akun** and **Cek pesanan**.
+7. In Cloudflare → **Workers & Pages** → `kerupuk-seblak-bandung-premium` → **Deployments**, wait for the latest deployment to show **Ready**. Open the existing `.workers.dev` address and refresh it. On a phone, refresh the page and open the ☰ menu to find **Pesanan saya** and **Akun saya / buat akun**.
 
 If the deployment fails, open its build log first. Do not rerun the D1 migration or create a new database for this update. Existing customer accounts, owner account, orders, settings, and uploaded photos remain in the same D1 database.
 
 ### What changes in this revision
 
 - The mobile menu includes customer sign-in/registration and order lookup.
-- Signed-in customers can see online order history on another device. A guest can recover a receipt with the order number and WhatsApp used at checkout.
+- The “Pesanan saya” view replaces the public order lookup form. Signed-in customers see only orders linked to their account WhatsApp and can open that history from another device after signing in. Guest orders are listed only in the browser/device where they were placed; create or sign into a customer account with the same WhatsApp number to see matching orders on other devices.
+- Guest history uses a random per-order access key kept in that browser; an order number and WhatsApp number alone do not unlock the guest order API. The browser can clear its guest list without deleting the server-side order. Anyone with access to a shared, unlocked browser may still view its local guest history; use an account PIN on shared devices and clear guest history when finished.
 - Customers may edit recipient/address/note or cancel before preparation. Changing product contents requires canceling and making a new order. Confirmed paid or prepared orders need admin assistance.
 - Completed and canceled orders move into a collapsed owner archive. Canceled orders are excluded from revenue and canceled stock is returned. Completed paid orders remain in finance reports. The owner can still exclude an erroneous completed order from a report in the archive.
 - Receipt and payment views offer WhatsApp links to Iqbal and Rehan with the order summary prefilled. The customer must tap **Kirim** inside WhatsApp; a browser cannot send a WhatsApp message silently.

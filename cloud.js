@@ -26,7 +26,7 @@
     },
     async registerCustomer(data){
       const result=await request('/api/auth/customer/register',{method:'POST',body:JSON.stringify(data)});
-      this.user=result.user;return result.user;
+      const session=await request('/api/session');this.user=session.user||result.user;return this.user;
     },
     async registerOwner(data){
       const result=await request('/api/auth/owner/register',{method:'POST',body:JSON.stringify(data)});
@@ -45,9 +45,10 @@
     async updateOwnerProfile(data){return await request('/api/owner/profile',{method:'PUT',body:JSON.stringify(data)});},
     async placeOrder(data){return await request('/api/orders',{method:'POST',body:JSON.stringify(data)});},
     async submitPayment(id,data){return await request(`/api/orders/${encodeURIComponent(id)}/payment`,{method:'POST',body:JSON.stringify(data)});},
-    async lookupOrder(id,phone=''){
-      const query=phone?`?phone=${encodeURIComponent(phone)}`:'';
-      return await request(`/api/orders/${encodeURIComponent(id)}${query}`);
+    async lookupOrder(id,summary=false,accessKey=''){
+      const params=new URLSearchParams();if(summary)params.set('summary','1');
+      const query=params.size?`?${params.toString()}`:'';
+      return await request(`/api/orders/${encodeURIComponent(id)}${query}`,{headers:accessKey?{'x-ksb-order-key':accessKey}:{}});
     },
     async updateCustomerOrder(id,data){return await request(`/api/orders/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(data)});},
     async updateOrder(id,data){return await request(`/api/owner/orders/${encodeURIComponent(id)}`,{method:'PATCH',body:JSON.stringify(data)});},
