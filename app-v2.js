@@ -34,7 +34,7 @@
     {id:'original',name:'Bandung Signature',mark:'✦',color:'#9a682e',recipe:[{id:'atom',min:1,max:1,note:'peres'},{id:'kencur',min:.5,max:.5},{id:'aida',min:.5,max:.75},{id:'bawang-goreng',min:.25,max:1/3}]},
     {id:'pedas',name:'Cikur Jeletot',mark:'♨',color:'#ad3828',recipe:[{id:'atom',min:1,max:1},{id:'kencur',min:.75,max:.75},{id:'aida',min:1,max:1},{id:'rawit',min:.75,max:1,note:'BonCabe, giling kasar'}]},
     {id:'jeruk',name:'Bandung Jeruk',mark:'✿',color:'#54784b',recipe:[{id:'atom',min:1,max:1,note:'peres'},{id:'kencur',min:.5,max:.5},{id:'aida',min:.5,max:.75},{id:'daun-jeruk',min:.75,max:1}]},
-    {id:'bbq',name:'BBQ Bandung Fusion',mark:'✷',color:'#81523b',recipe:[{id:'atom',min:.5,max:.75},{id:'kencur',min:.25,max:1/3},{id:'aida',min:.5,max:.5},{id:'bbq',min:1.5,max:1.5}]},
+    {id:'bbq',name:'BBQ Bandung Fusion',mark:'✷',color:'#81523b',recipe:[{id:'atom',min:.5,max:.75},{id:'kencur',min:.25,max:1/3},{id:'aida',min:.5,max:.5},{id:'bbq',min:.5,max:.5}]},
     {id:'jagung',name:'Jagung Bakar Bandung',mark:'✹',color:'#b17a26',recipe:[{id:'atom',min:.5,max:.75},{id:'kencur',min:.25,max:1/3},{id:'aida',min:.25,max:1/3},{id:'jagung-bakar',min:1.5,max:1.5}]},
     {id:'balado',name:'Balado Daun Jeruk',mark:'●',color:'#9b292d',recipe:[{id:'atom',min:.5,max:.75},{id:'kencur',min:.125,max:.125,note:'sejumput'},{id:'aida',min:.25,max:1/3},{id:'balado',min:1.25,max:1.25},{id:'daun-jeruk',min:.5,max:.75}]}
   ];

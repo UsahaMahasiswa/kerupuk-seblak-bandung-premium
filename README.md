@@ -34,7 +34,7 @@ Untuk menjalankan server lokal, buka terminal pada folder ini lalu jalankan `npx
 - **Bandung Signature:** Atom Bulan 1 sdt peres, kencur 1/2 sdt, Aida 1/2–3/4 sdt, bawang putih goreng halus 1/4–1/3 sdt.
 - **Cikur Jeletot:** Atom Bulan 1 sdt, kencur 3/4 sdt, Aida 1 sdt, cabai rawit kering giling kasar (BonCabe) 3/4–1 sdt.
 - **Bandung Jeruk:** Atom Bulan 1 sdt peres, kencur 1/2 sdt, Aida 1/2–3/4 sdt, bumbu daun jeruk 3/4–1 sdt.
-- **BBQ Bandung Fusion:** Atom Bulan 1/2–3/4 sdt, kencur 1/4–1/3 sdt, Aida 1/2 sdt, bumbu BBQ 1,5 sdt.
+- **BBQ Bandung Fusion:** Atom Bulan 1/2–3/4 sdt, kencur 1/4–1/3 sdt, Aida 1/2 sdt, bumbu BBQ 1/2 sdt.
 - **Jagung Bakar Bandung:** Atom Bulan 1/2–3/4 sdt, kencur 1/4–1/3 sdt, Aida 1/4–1/3 sdt, bumbu Jagung Bakar 1,5 sdt.
 - **Balado Daun Jeruk:** Atom Bulan 1/2–3/4 sdt, kencur sejumput (1/8 sdt), Aida 1/4–1/3 sdt, bumbu Balado Pedas Manis 1,25 sdt, bumbu daun jeruk 1/2–3/4 sdt.
 

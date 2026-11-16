@@ -1,0 +1,10 @@
+UPDATE TAKARAN BUMBU SIGNATURE
+
+Perubahan ini hanya mengubah bumbu BBQ Bandung Fusion dari 1½ sdt menjadi ½ sdt per 100 g. Lima racikan Signature lainnya sudah sama dengan tabel yang dikirim. Racik sendiri dan daftar jenis kerupuk tidak berubah.
+
+1. Ekstrak kerupuk-seblak-update-signature-2026-11-16.zip.
+2. Salin isi ZIP ke folder utama repo lokal kerupuk-seblak-bandung-premium; pilih Replace/Ganti.
+3. Jangan mengganti wrangler.jsonc. Tidak perlu migration SQL atau mengubah database.
+4. Di GitHub Desktop, commit perubahan dengan ringkasan misalnya “Sesuaikan takaran Signature”, lalu klik Push origin.
+5. Tunggu deployment Cloudflare Workers & Pages berstatus Ready.
+6. Muat ulang website. Takaran baru akan tampil di kartu Signature dan ikut masuk ke detail pesanan/struk baru.
