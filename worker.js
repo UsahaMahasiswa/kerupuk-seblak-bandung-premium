@@ -101,6 +101,18 @@ async function getState(env) {
   const row = await env.DB.prepare('SELECT settings_json,stock_json,ledger_json FROM site_state WHERE id=1').first();
   return {settings:{...DEFAULT_SETTINGS,...JSON.parse(row.settings_json||'{}')},stock:JSON.parse(row.stock_json||'{}'),ledger:JSON.parse(row.ledger_json||'[]'),rawStockJson:row.stock_json};
 }
+async function versionMediaUrls(env,settings) {
+  const next=structuredClone(settings||{}),rows=await env.DB.prepare('SELECT media_key,updated_at FROM media').all(),versions=new Map((rows.results||[]).map(row=>[row.media_key,row.updated_at]));
+  const version=value=>{
+    if(typeof value!=='string')return value;
+    const match=value.match(/^\/api\/media\/([a-z0-9_-]+(?:\/[a-z0-9_-]+)?)(?:\?.*)?$/i);
+    const updatedAt=match&&versions.get(match[1]);
+    return updatedAt?`/api/media/${match[1]}?v=${encodeURIComponent(updatedAt)}`:value;
+  };
+  for(const field of ['qrisImage','heroImage','brandLogo','storyImage'])next[field]=version(next[field]);
+  for(const field of ['productImages','flavorImages','ingredientImages'])for(const [id,value] of Object.entries(next[field]||{}))next[field][id]=version(value);
+  return next;
+}
 function publicSettings(settings) {
   const copy = structuredClone(settings);
   delete copy.hppPer100g; delete copy.pouchCost; delete copy.initialCash;
@@ -255,7 +267,7 @@ async function createOrder(request,env,session) {
 }
 async function getOwnerState(env,session) {
   const state=await getState(env),orders=await getOrders(env),account=await getAccount(env,session.phone);
-  return json({settings:state.settings,stock:state.stock,ledger:state.ledger,orders,owner:{phone:account.phone,name:account.name}});
+  return json({settings:await versionMediaUrls(env,state.settings),stock:state.stock,ledger:state.ledger,orders,owner:{phone:account.phone,name:account.name}});
 }
 async function getOwnerAccounts(env) {
   const [accountRows,activityRows,blockedRows]=await Promise.all([
@@ -296,7 +308,7 @@ async function saveOwnerState(request,env) {
   const stmt=env.DB.prepare('UPDATE site_state SET settings_json=?,stock_json=?,ledger_json=?,updated_at=? WHERE id=1')
     .bind(JSON.stringify(media.settings),JSON.stringify(stock),JSON.stringify(ledger),nowIso());
   await env.DB.batch([...media.statements,stmt]);
-  return json({settings:media.settings,stock,ledger});
+  return json({settings:await versionMediaUrls(env,media.settings),stock,ledger});
 }
 async function updateOwnerOrder(request,env,id) {
   const orderRow=await env.DB.prepare('SELECT status,data_json FROM orders WHERE id=?').bind(id).first();
@@ -389,7 +401,7 @@ async function dispatch(request,env) {
   const url=new URL(request.url),path=url.pathname,method=request.method;
   if(path==='/api/bootstrap'&&method==='GET') {
     const state=await getState(env),owner=await env.DB.prepare("SELECT phone FROM accounts WHERE role='owner' LIMIT 1").first();
-    return json({settings:publicSettings(state.settings),stock:state.stock,ownerExists:Boolean(owner)});
+    return json({settings:publicSettings(await versionMediaUrls(env,state.settings)),stock:state.stock,ownerExists:Boolean(owner)});
   }
   if(path==='/api/auth/customer/register'&&method==='POST') {
     const body=await parseJson(request);return await createAccount(env,{phone:normalizePhone(body.phone),name:body.name,pin:body.pin,role:'customer',address:body.address});

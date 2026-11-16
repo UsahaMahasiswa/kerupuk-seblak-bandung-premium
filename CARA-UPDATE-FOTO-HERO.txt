@@ -1,0 +1,15 @@
+UPDATE PERBAIKAN FOTO HERO — 16 NOVEMBER 2026
+
+Tidak perlu migration SQL dan tidak perlu membuat database baru.
+
+1. Ekstrak kerupuk-seblak-fix-foto-hero-2026-11-16.zip.
+2. Buka folder repo GitHub lokal kerupuk-seblak-bandung-premium.
+3. Salin isi ZIP ke folder utama repo dan pilih Replace/Ganti.
+4. Jangan mengganti wrangler.jsonc.
+5. Di GitHub Desktop, periksa Changes, commit (misalnya “Perbaiki cache foto hero”), lalu Push origin.
+6. Tunggu Cloudflare Workers & Pages > kerupuk-seblak-bandung-premium > Deployments sampai deployment baru Ready.
+7. Buka website dan muat ulang. Masuk sebagai pemilik, buka Pengaturan > Foto hero.
+8. Pilih file gambar. Pratinjau akan langsung berubah. Klik Simpan pengaturan dan tunggu pesan “Foto hero berhasil tersimpan dan diperbarui di website.”
+9. Buka halaman depan atau muat ulang untuk memastikan foto baru tampil.
+
+Perbaikan ini memberi URL versi baru setiap kali media berubah, supaya cache foto lama tidak menutupi foto baru. Preview upload kini terlihat sebelum disimpan. Jika format foto gagal diproses, simpan tidak diteruskan dan pesan error akan ditampilkan. Data jenis kerupuk dan database tidak diubah.
