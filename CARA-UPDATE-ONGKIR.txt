@@ -1,0 +1,14 @@
+UPDATE TARIF ONGKIR — 17 NOVEMBER 2026
+
+Update ini membuat pemilik dapat mengubah tarif ongkir flat dari dashboard. Ambang gratis ongkir tetap Rp70.000 sesuai kebijakan sebelumnya. Tidak ada perubahan database dan tidak perlu menjalankan SQL.
+
+1. Ekstrak kerupuk-seblak-update-ongkir-2026-11-17.zip.
+2. Salin semua isi ZIP ke folder utama repo GitHub lokal kerupuk-seblak-bandung-premium. Pilih Replace/Ganti bila diminta.
+3. Jangan mengubah atau mengganti wrangler.jsonc.
+4. Buka GitHub Desktop, periksa Changes, masukkan ringkasan commit seperti “Buat tarif ongkir dapat diatur”, klik Commit to main, lalu Push origin.
+5. Di Cloudflare Workers & Pages > kerupuk-seblak-bandung-premium > Deployments, tunggu deployment terbaru berstatus Ready.
+6. Buka website, masuk sebagai pemilik, buka Pengaturan > PO, ongkir & pembayaran.
+7. Isi Tarif ongkir (Rp), misalnya 12000, lalu klik Simpan pengaturan. Tarif akan dipakai untuk pesanan baru di bawah subtotal Rp70.000. Pesanan dengan subtotal produk Rp70.000 atau lebih tetap mendapat gratis ongkir.
+8. Muat ulang halaman. Pengumuman, cara pesan, tas, checkout, dan total baru akan menampilkan tarif terbaru. Struk dan laporan pesanan lama tetap memakai ongkir yang tercatat ketika pesanan tersebut dibuat.
+
+Tarif dapat diisi dari Rp0 sampai Rp1.000.000 dengan nilai bulat. Tarif Rp0 membuat ongkir tidak dikenakan untuk pesanan di bawah ambang gratis ongkir juga.

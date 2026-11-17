@@ -16,7 +16,7 @@ Untuk menjalankan server lokal, buka terminal pada folder ini lalu jalankan `npx
 - Pilih berat bersih 100 g, 200 g, atau 300 g; harga mengikuti tarif per 100 g yang dapat diatur pemilik.
 - Pilih enam racikan Signature dengan formula lengkap, atau pilih beberapa dari 10 bumbu dan atur sendok masing-masing.
 - Keranjang dan checkout tamu; akun pelanggan opsional dengan WhatsApp + PIN untuk menyimpan alamat dan riwayat.
-- Tidak ada minimum belanja. Ongkir tetap Rp10.000 untuk semua jarak dan gratis jika subtotal produk mencapai Rp70.000.
+- Tidak ada minimum belanja. Tarif ongkir flat dapat diubah pemilik dari Pengaturan; gratis ongkir tetap mulai subtotal produk Rp70.000.
 - Owner dapat mengganti logo utama, ikon tiap resep Signature, ikon tiap bumbu, foto katalog, dan foto hero dari Pengaturan dashboard.
 - Produk Kerupuk Merah Obor kini ditampilkan sebagai Kerupuk Pangsit.
 - Footer menampilkan WhatsApp admin Iqbal dan Rehan serta Instagram @_iqbalabdlh dan @raihanzhr.

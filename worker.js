@@ -236,7 +236,7 @@ async function createOrder(request,env,session) {
       flavor:SIGNATURE_IDS.has(raw.flavor)?raw.flavor:'original',signatureId:SIGNATURE_IDS.has(raw.signatureId)?raw.signatureId:null,
       price:unitPrice,unitCost:Math.round((Number(settings.hppPer100g)||0)*weight/100+(Number(settings.pouchCost)||0))});
   }
-  const packages=items.reduce((sum,item)=>sum+item.qty,0),subtotal=items.reduce((sum,item)=>sum+item.price*item.qty,0),shipping=subtotal>=FREE_SHIPPING?0:SHIPPING_FEE,total=subtotal+shipping;
+  const packages=items.reduce((sum,item)=>sum+item.qty,0),subtotal=items.reduce((sum,item)=>sum+item.price*item.qty,0),freeThreshold=Math.max(0,Number(settings.freeShippingSubtotal)||FREE_SHIPPING),shipping=subtotal>=freeThreshold?0:Math.max(0,Number(settings.shippingFee??SHIPPING_FEE)),total=subtotal+shipping;
   const used={};
   for(const item of items) for(const part of item.mix) used[part.id]=(used[part.id]||0)+part.grams*item.qty;
   for(const [id,grams] of Object.entries(used)) if((Number(stock[id])||0)<grams) return fail(`Stok ${PRODUCT_NAMES[id]} tidak cukup.`,409);
@@ -302,7 +302,9 @@ async function unblockCustomerPhone(env,phone) {
 }
 async function saveOwnerState(request,env) {
   const body=await parseJson(request),old=await getState(env),settings={...old.settings,...(body.settings||{})},stock={...old.stock,...(body.stock||{})};
-  settings.shippingFee=SHIPPING_FEE;settings.freeShippingSubtotal=FREE_SHIPPING;
+  const shippingFee=Number(settings.shippingFee??old.settings.shippingFee??SHIPPING_FEE);
+  if(!Number.isInteger(shippingFee)||shippingFee<0||shippingFee>1_000_000)return fail('Tarif ongkir harus bilangan bulat antara Rp0 dan Rp1.000.000.');
+  settings.shippingFee=shippingFee;settings.freeShippingSubtotal=FREE_SHIPPING;
   for(const id of Object.keys(PRODUCT_NAMES)) stock[id]=Math.max(0,Math.round(Number(stock[id])||0));
   const media=await saveSettingsAndMedia(env,settings),ledger=Array.isArray(body.ledger)?body.ledger.slice(-500):old.ledger;
   const stmt=env.DB.prepare('UPDATE site_state SET settings_json=?,stock_json=?,ledger_json=?,updated_at=? WHERE id=1')
